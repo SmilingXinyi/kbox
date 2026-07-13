@@ -1,5 +1,11 @@
+import {Outlet} from 'react-router';
+
 function App() {
-    return <h1>kbox</h1>;
+    return (
+        <div id="app">
+            <Outlet />
+        </div>
+    );
 }
 
 export default App;
