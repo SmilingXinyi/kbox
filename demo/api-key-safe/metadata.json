@@ -1,0 +1,6 @@
+{
+    "name": "API Key Safe",
+    "description": "An end-to-end encrypted API Key wallet featuring multi-key entries (AK/SK), WebAuthn-based TouchID/FaceID protection, and secure local cryptography.",
+    "requestFramePermissions": [],
+    "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,11 +1,12 @@
 import {Outlet} from 'react-router';
 
-function App() {
+/**
+ * Root layout shell. Page-level vault UI lives in HomePage.
+ */
+export default function App() {
     return (
-        <div id="app">
+        <div id="app" className="min-h-dvh">
             <Outlet />
         </div>
     );
 }
-
-export default App;

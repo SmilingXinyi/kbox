@@ -1,10 +1,66 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+@import 'tailwindcss';
+
+@theme {
+    --font-sans: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+    --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
+
+    --color-surface-950: #0c1117;
+    --color-surface-900: #121a22;
+    --color-surface-800: #1a2430;
+    --color-surface-700: #243040;
+    --color-surface-600: #3a4a5c;
+    --color-surface-400: #8a9bb0;
+    --color-surface-300: #b6c2d0;
+    --color-surface-100: #e8eef4;
+
+    --color-accent: #2dd4a8;
+    --color-accent-dim: #1a9b7a;
+    --color-accent-muted: color-mix(in srgb, #2dd4a8 18%, transparent);
+
+    --color-danger: #f07178;
+    --color-danger-muted: color-mix(in srgb, #f07178 16%, transparent);
+
+    --color-warn: #e6b450;
+}
+
 *,
 *::before,
 *::after {
     box-sizing: border-box;
 }
 
+html {
+    color-scheme: dark;
+}
+
 body {
     margin: 0;
-    font-family: system-ui, sans-serif;
+    min-height: 100dvh;
+    font-family: var(--font-sans);
+    background-color: var(--color-surface-950);
+    color: var(--color-surface-100);
+    -webkit-font-smoothing: antialiased;
+}
+
+#root {
+    min-height: 100dvh;
+}
+
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--color-surface-400) 35%, transparent);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in srgb, var(--color-surface-400) 55%, transparent);
 }

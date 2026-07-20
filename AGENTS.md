@@ -142,9 +142,9 @@ YAML 通过 override 使用 2 空格缩进。
 
 ## 样式
 
-- 默认使用 CSS（全局 token + CSS Modules）。未经用户要求，不引入 Tailwind / CSS-in-JS / UI 组件库。
-- 设计系统起步时，在 `:root` 定义颜色、间距、字体等 CSS 变量。
-- 魔法数字复用 ≥ 2 次时提取为 token。
+- 默认使用 **Tailwind CSS v4**（`@tailwindcss/vite`）；design tokens 放在 `src/index.css` 的 `@theme` / CSS 变量。
+- 已批准的 UI 依赖：`lucide-react`（图标）、`motion`（动画）。未经要求不引入其他 CSS-in-JS / UI 组件库。
+- 魔法数字复用 ≥ 2 次时提取为 token（`@theme` 或 CSS 变量）。
 - 同时兼顾桌面与移动端；应用壳层优先弹性布局，少用死板定宽网格。
 
 ## 状态与数据

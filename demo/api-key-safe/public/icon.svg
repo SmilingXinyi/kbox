@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a" />
+      <stop offset="100%" stop-color="#020617" />
+    </linearGradient>
+    <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#818cf8" />
+      <stop offset="100%" stop-color="#4f46e5" />
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#fbbf24" />
+      <stop offset="100%" stop-color="#f59e0b" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="128" fill="url(#bgGrad)" />
+  <g transform="translate(128, 112)">
+    <!-- Shield Base -->
+    <path d="M128 0 C200 12, 256 36, 256 36 C256 36, 256 160, 256 180 C256 240, 160 280, 128 288 C96 280, 0 240, 0 180 C0 160, 0 36, 0 36 C0 36, 56 12, 128 0 Z" fill="url(#shieldGrad)" opacity="0.9"/>
+    <!-- Shield Inner -->
+    <path d="M128 16 C190 26, 236 46, 236 46 C236 46, 236 150, 236 168 C236 218, 154 252, 128 260 C102 252, 20 218, 20 168 C20 150, 20 46, 20 46 C20 46, 66 26, 128 16 Z" fill="#0f172a" />
+    <!-- Golden Key Logo inside Shield -->
+    <g transform="translate(76, 64)">
+      <!-- Key Head -->
+      <circle cx="52" cy="40" r="32" fill="none" stroke="url(#goldGrad)" stroke-width="14" />
+      <circle cx="52" cy="40" r="8" fill="url(#goldGrad)" />
+      <!-- Key Shaft -->
+      <rect x="45" y="72" width="14" height="76" fill="url(#goldGrad)" rx="3" />
+      <!-- Key Teeth -->
+      <rect x="59" y="100" width="22" height="12" fill="url(#goldGrad)" rx="2" />
+      <rect x="59" y="120" width="22" height="12" fill="url(#goldGrad)" rx="2" />
+    </g>
+  </g>
+</svg>
