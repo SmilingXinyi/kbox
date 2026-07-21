@@ -2,6 +2,9 @@
  * Dual-browser WebRTC vault sync smoke test.
  * Opens two isolated Chromium contexts (device A / device B),
  * pairs via PeerJS peer ID (manual join path), then runs both merge strategies.
+ *
+ * Timeouts are intentionally generous for PeerJS signaling / ICE on cold starts,
+ * but every wait is tied to a concrete UI condition (no bare sleep).
  */
 import {chromium} from 'playwright';
 import {mkdir} from 'node:fs/promises';
@@ -10,6 +13,18 @@ import path from 'node:path';
 const BASE_URL = process.env.KBOX_URL ?? 'http://127.0.0.1:4173';
 const ARTIFACT_DIR = '/opt/cursor/artifacts/dual-browser-sync';
 const PIN = '1234';
+
+/** Centralized waits — override via env for slower CI without editing the script. */
+const TIMEOUT = {
+    navigation: Number(process.env.KBOX_TIMEOUT_NAV ?? 15_000),
+    vaultReady: Number(process.env.KBOX_TIMEOUT_VAULT ?? 20_000),
+    dialog: Number(process.env.KBOX_TIMEOUT_DIALOG ?? 8_000),
+    peerReady: Number(process.env.KBOX_TIMEOUT_PEER ?? 30_000),
+    connected: Number(process.env.KBOX_TIMEOUT_CONNECTED ?? 45_000),
+    synced: Number(process.env.KBOX_TIMEOUT_SYNCED ?? 45_000),
+    assert: Number(process.env.KBOX_TIMEOUT_ASSERT ?? 10_000),
+    close: Number(process.env.KBOX_TIMEOUT_CLOSE ?? 5_000)
+};
 
 async function shot(page, name) {
     await mkdir(ARTIFACT_DIR, {recursive: true});
@@ -20,8 +35,8 @@ async function shot(page, name) {
 }
 
 async function setupVault(page, ownerName) {
-    await page.goto(BASE_URL, {waitUntil: 'networkidle'});
-    await page.getByRole('heading', {name: 'Set up your vault'}).waitFor({timeout: 15000});
+    await page.goto(BASE_URL, {waitUntil: 'networkidle', timeout: TIMEOUT.navigation});
+    await page.getByRole('heading', {name: 'Set up your vault'}).waitFor({timeout: TIMEOUT.navigation});
 
     await page.getByPlaceholder('e.g. cloud-master').fill(ownerName);
     const pinInputs = page.locator('input[type="password"]');
@@ -36,29 +51,38 @@ async function setupVault(page, ownerName) {
     }
 
     await page.getByRole('button', {name: 'Create secure vault'}).click();
-    await page.getByText('Vault unlocked').waitFor({timeout: 20000});
+    await page.getByText('Vault unlocked').waitFor({timeout: TIMEOUT.vaultReady});
 }
 
 async function addApiKey(page, label, secret) {
     await page.getByRole('button', {name: 'Add'}).first().click();
     const dialog = page.getByRole('dialog');
-    await dialog.waitFor({timeout: 8000});
+    await dialog.waitFor({timeout: TIMEOUT.dialog});
     await dialog.getByPlaceholder('e.g. AWS Production').fill(label);
     await dialog.getByPlaceholder('Secret value').fill(secret);
     await dialog.getByRole('button', {name: 'Save'}).click();
-    await page.getByText(label).first().waitFor({timeout: 10000});
+    await page.getByText(label).first().waitFor({timeout: TIMEOUT.assert});
 }
 
 async function openSync(page) {
     await page.getByRole('button', {name: 'Device sync'}).click();
-    await page.getByRole('heading', {name: 'Device sync'}).waitFor({timeout: 5000});
+    await page.getByRole('heading', {name: 'Device sync'}).waitFor({timeout: TIMEOUT.dialog});
 }
 
 async function startHost(page) {
     await page.getByRole('button', {name: 'Enable sync service'}).click();
-    await page.getByText('Waiting for the other device to scan').waitFor({timeout: 30000});
+    await page.getByText('Waiting for the other device to scan').waitFor({timeout: TIMEOUT.peerReady});
     const peerCode = page.locator('code').first();
-    await peerCode.waitFor({timeout: 30000});
+    // Peer ID is filled asynchronously after PeerJS `open`; wait until it is non-placeholder.
+    await peerCode.waitFor({timeout: TIMEOUT.peerReady});
+    await page.waitForFunction(
+        el => {
+            const text = (el.textContent ?? '').trim();
+            return text.length > 0 && text !== '…';
+        },
+        await peerCode.elementHandle(),
+        {timeout: TIMEOUT.peerReady}
+    );
     const peerId = (await peerCode.textContent())?.trim();
     if (!peerId || peerId === '…') {
         throw new Error('Host peer ID not ready');
@@ -73,7 +97,7 @@ async function joinAsGuest(page, peerId) {
 }
 
 async function waitConnected(page) {
-    await page.getByText('Devices linked — ready to sync').waitFor({timeout: 45000});
+    await page.getByText('Devices linked — ready to sync').waitFor({timeout: TIMEOUT.connected});
 }
 
 async function runStrategy(page, buttonName) {
@@ -81,7 +105,7 @@ async function runStrategy(page, buttonName) {
         await dialog.accept();
     });
     await page.getByRole('button', {name: buttonName}).click();
-    await page.getByText('Sync complete').waitFor({timeout: 45000});
+    await page.getByText('Sync complete').waitFor({timeout: TIMEOUT.synced});
 }
 
 async function closeSync(page) {
@@ -89,14 +113,18 @@ async function closeSync(page) {
     const x = page.locator('[role="dialog"] button[aria-label="Close"]');
     if (await x.count()) {
         await x.first().click();
-        await page.getByRole('heading', {name: 'Device sync'}).waitFor({state: 'hidden', timeout: 5000}).catch(() => {});
+        await page
+            .getByRole('heading', {name: 'Device sync'})
+            .waitFor({state: 'hidden', timeout: TIMEOUT.close});
         return;
     }
     await page.keyboard.press('Escape');
+    await page.getByRole('heading', {name: 'Device sync'}).waitFor({state: 'hidden', timeout: TIMEOUT.close});
 }
 
 async function main() {
     console.log(`BASE_URL=${BASE_URL}`);
+    console.log('TIMEOUTS', TIMEOUT);
     const browser = await chromium.launch({
         headless: true,
         args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream']
@@ -153,7 +181,7 @@ async function main() {
 
         console.log('--- Strategy: A overwrites B ---');
         await runStrategy(hostPage, 'A overwrites B');
-        await guestPage.getByText('Sync complete').waitFor({timeout: 45000});
+        await guestPage.getByText('Sync complete').waitFor({timeout: TIMEOUT.synced});
         await shot(hostPage, '08-host-synced-a-over-b');
         await shot(guestPage, '09-guest-synced-a-over-b');
 
@@ -161,7 +189,7 @@ async function main() {
         await closeSync(guestPage);
 
         // Guest vault should now show Host-Only-Key
-        await guestPage.getByText('Host-Only-Key').waitFor({timeout: 10000});
+        await guestPage.getByText('Host-Only-Key').waitFor({timeout: TIMEOUT.assert});
         const guestStillHasOwn = await guestPage.getByText('Guest-Only-Key').count();
         if (guestStillHasOwn > 0) {
             throw new Error('A-overwrites-B failed: guest still shows Guest-Only-Key');
@@ -182,14 +210,14 @@ async function main() {
 
         console.log('--- Strategy: Read B, overwrite A ---');
         await runStrategy(hostPage, 'Read B, overwrite A');
-        await guestPage.getByText('Sync complete').waitFor({timeout: 45000});
+        await guestPage.getByText('Sync complete').waitFor({timeout: TIMEOUT.synced});
         await shot(hostPage, '10-host-synced-b-over-a');
         await shot(guestPage, '11-guest-synced-b-over-a');
 
         await closeSync(hostPage);
         await closeSync(guestPage);
 
-        await hostPage.getByText('Guest-After-Sync').waitFor({timeout: 10000});
+        await hostPage.getByText('Guest-After-Sync').waitFor({timeout: TIMEOUT.assert});
         console.log('Verified: host now has Guest-After-Sync');
 
         console.log('\nSUCCESS: dual-browser sync strategies both worked');

@@ -31,23 +31,37 @@ export default function VaultSync({isOpen, onClose, sync, isUnlocked, onRequestU
     const [scanError, setScanError] = useState<string | null>(null);
     const scannerRef = useRef<Html5Qrcode | null>(null);
     const handledScanRef = useRef(false);
+    /** Monotonic token so overlapping start/stop cycles ignore stale async completions. */
+    const scannerGenerationRef = useRef(0);
+    const scannerStoppingRef = useRef(false);
     const connectWithQrTextRef = useRef(sync.connectWithQrText);
 
     useEffect(() => {
         connectWithQrTextRef.current = sync.connectWithQrText;
     }, [sync.connectWithQrText]);
 
-    const stopScanner = async () => {
+    const stopScanner = async (expectedGeneration?: number) => {
+        if (scannerStoppingRef.current) return;
         const scanner = scannerRef.current;
-        scannerRef.current = null;
         if (!scanner) return;
+
+        // A newer start() may have already replaced this instance.
+        if (expectedGeneration != null && scannerGenerationRef.current !== expectedGeneration) {
+            return;
+        }
+
+        scannerStoppingRef.current = true;
+        scannerRef.current = null;
         try {
             if (scanner.isScanning) {
                 await scanner.stop();
             }
             scanner.clear();
-        } catch {
-            // Scanner may already be stopped.
+        } catch (err) {
+            // Common when the camera track is already gone; keep a breadcrumb for harder races.
+            console.warn('QR scanner stop/clear failed:', err);
+        } finally {
+            scannerStoppingRef.current = false;
         }
     };
 
@@ -67,28 +81,51 @@ export default function VaultSync({isOpen, onClose, sync, isUnlocked, onRequestU
         }
 
         handledScanRef.current = false;
+        const generation = ++scannerGenerationRef.current;
         let cancelled = false;
 
         async function startScanner() {
+            if (cancelled || scannerGenerationRef.current !== generation) return;
+
             try {
+                // Ensure any prior camera session is fully released before starting again.
+                await stopScanner();
+                if (cancelled || scannerGenerationRef.current !== generation) return;
+
                 const scanner = new Html5Qrcode(SCANNER_REGION_ID);
+                if (cancelled || scannerGenerationRef.current !== generation) {
+                    try {
+                        scanner.clear();
+                    } catch (err) {
+                        console.warn('Abandoned QR scanner clear failed:', err);
+                    }
+                    return;
+                }
+
                 scannerRef.current = scanner;
                 await scanner.start(
                     {facingMode: 'environment'},
                     {fps: 8, qrbox: {width: 220, height: 220}},
                     decoded => {
-                        if (handledScanRef.current || cancelled) return;
+                        if (handledScanRef.current || cancelled || scannerGenerationRef.current !== generation) {
+                            return;
+                        }
                         handledScanRef.current = true;
                         void connectWithQrTextRef.current(decoded);
-                        void stopScanner();
+                        void stopScanner(generation);
                     },
                     () => {
                         // Ignore per-frame not-found errors.
                     }
                 );
+
+                // If we were cancelled while awaiting start(), shut the camera back down.
+                if (cancelled || scannerGenerationRef.current !== generation) {
+                    void stopScanner(generation);
+                }
             } catch (e) {
                 console.error('QR scanner failed:', e);
-                if (!cancelled) {
+                if (!cancelled && scannerGenerationRef.current === generation) {
                     setScanError(
                         e instanceof Error ? e.message : 'Camera access failed. Enter the peer ID manually instead.'
                     );
@@ -100,6 +137,9 @@ export default function VaultSync({isOpen, onClose, sync, isUnlocked, onRequestU
 
         return () => {
             cancelled = true;
+            // Bump generation so in-flight start()/decode callbacks become no-ops,
+            // then stop whatever camera instance is currently held (no generation gate).
+            scannerGenerationRef.current += 1;
             void stopScanner();
         };
     }, [isOpen, sync.sessionState]);

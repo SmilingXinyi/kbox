@@ -26,6 +26,13 @@ export function useWebRTCSync({localItems, onReplaceItems}: UseWebRTCSyncOptions
 
     const sessionRef = useRef<WebRtcSyncSession | null>(null);
     const pendingStrategyRef = useRef<SyncStrategy | null>(null);
+
+    /**
+     * PeerJS / data-channel handlers are registered once when the session starts.
+     * Props like `localItems` and `onReplaceItems` change on later renders; reading
+     * them from a render closure would freeze stale values (classic stale-closure bug).
+     * Keep refs in sync so async WebRTC callbacks always see the latest vault state.
+     */
     const localItemsRef = useRef(localItems);
     const onReplaceItemsRef = useRef(onReplaceItems);
 

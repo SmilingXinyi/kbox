@@ -26,6 +26,12 @@ function isWireMessage(value: unknown): value is SyncWireMessage {
     );
 }
 
+function errorMessage(err: unknown, fallback: string): string {
+    if (err instanceof Error && err.message) return err.message;
+    if (typeof err === 'string' && err) return err;
+    return fallback;
+}
+
 export class WebRtcSyncSession {
     private peer: Peer | null = null;
     private conn: DataConnection | null = null;
@@ -47,8 +53,12 @@ export class WebRtcSyncSession {
         this.peer = peer;
 
         peer.on('connection', conn => {
+            if (this.destroyed) {
+                this.safeCloseConnection(conn, 'Rejected connection after session destroyed');
+                return;
+            }
             if (this.conn) {
-                conn.close();
+                this.safeCloseConnection(conn, 'Rejected extra peer connection');
                 return;
             }
             this.attachConnection(conn);
@@ -57,14 +67,14 @@ export class WebRtcSyncSession {
         return new Promise((resolve, reject) => {
             const onOpen = (id: string) => {
                 cleanup();
+                this.bindPeerLifecycleErrors(peer, 'Host peer error');
                 this.events.onPeerId?.(id);
                 this.events.onStateChange?.('waiting');
                 resolve(id);
             };
             const onError = (err: Error) => {
                 cleanup();
-                this.events.onStateChange?.('error');
-                this.events.onError?.(err.message || 'Failed to start WebRTC host.');
+                this.reportError(err, 'Failed to start WebRTC host.');
                 reject(err);
             };
             const cleanup = () => {
@@ -86,12 +96,12 @@ export class WebRtcSyncSession {
         await new Promise<void>((resolve, reject) => {
             const onOpen = () => {
                 cleanup();
+                this.bindPeerLifecycleErrors(peer, 'Guest peer error');
                 resolve();
             };
             const onError = (err: Error) => {
                 cleanup();
-                this.events.onStateChange?.('error');
-                this.events.onError?.(err.message || 'Failed to start WebRTC guest.');
+                this.reportError(err, 'Failed to start WebRTC guest.');
                 reject(err);
             };
             const cleanup = () => {
@@ -103,8 +113,13 @@ export class WebRtcSyncSession {
         });
 
         this.events.onStateChange?.('connecting');
-        const conn = peer.connect(hostPeerId, {reliable: true});
-        this.attachConnection(conn);
+        try {
+            const conn = peer.connect(hostPeerId, {reliable: true});
+            this.attachConnection(conn);
+        } catch (err) {
+            this.reportError(err, 'Failed to open data channel to host.');
+            throw err instanceof Error ? err : new Error(errorMessage(err, 'Failed to open data channel to host.'));
+        }
     }
 
     sendSyncRequest(strategy: SyncStrategy, items?: ApiKeyItem[]): void {
@@ -127,26 +142,36 @@ export class WebRtcSyncSession {
         if (this.destroyed) return;
         this.destroyed = true;
 
-        try {
-            this.conn?.close();
-        } catch {
-            // ignore
-        }
+        this.safeCloseConnection(this.conn, 'Failed to close data connection during teardown');
         this.conn = null;
 
         try {
             this.peer?.destroy();
-        } catch {
-            // ignore
+        } catch (err) {
+            // Teardown should still finish; surface the failure without leaving the session hanging.
+            console.warn('Failed to destroy PeerJS peer:', err);
+            this.events.onError?.(errorMessage(err, 'Failed to destroy WebRTC peer.'));
         }
         this.peer = null;
         this.events.onStateChange?.('closed');
     }
 
     private async createPeer(): Promise<Peer> {
-        // PeerJS public cloud signaling; STUN is configured by PeerJS defaults.
-        return new Peer({
-            debug: 0
+        try {
+            // PeerJS public cloud signaling; STUN is configured by PeerJS defaults.
+            return new Peer({
+                debug: 0
+            });
+        } catch (err) {
+            this.reportError(err, 'Failed to create WebRTC peer.');
+            throw err instanceof Error ? err : new Error(errorMessage(err, 'Failed to create WebRTC peer.'));
+        }
+    }
+
+    private bindPeerLifecycleErrors(peer: Peer, fallback: string): void {
+        peer.on('error', err => {
+            if (this.destroyed) return;
+            this.reportError(err, fallback);
         });
     }
 
@@ -171,11 +196,15 @@ export class WebRtcSyncSession {
         }
 
         conn.on('data', raw => {
-            if (!isWireMessage(raw)) {
-                this.events.onError?.('Received invalid sync payload.');
-                return;
+            try {
+                if (!isWireMessage(raw)) {
+                    this.events.onError?.('Received invalid sync payload.');
+                    return;
+                }
+                this.handleMessage(raw);
+            } catch (err) {
+                this.reportError(err, 'Failed while handling sync message.');
             }
-            this.handleMessage(raw);
         });
 
         conn.on('close', () => {
@@ -185,8 +214,8 @@ export class WebRtcSyncSession {
         });
 
         conn.on('error', err => {
-            this.events.onStateChange?.('error');
-            this.events.onError?.(err.message || 'Data channel error.');
+            if (this.destroyed) return;
+            this.reportError(err, 'Data channel error.');
         });
     }
 
@@ -218,6 +247,29 @@ export class WebRtcSyncSession {
             this.events.onError?.('Peer is not connected.');
             return;
         }
-        this.conn.send(message);
+        try {
+            this.conn.send(message);
+        } catch (err) {
+            this.reportError(err, 'Failed to send sync message.');
+        }
+    }
+
+    private safeCloseConnection(conn: DataConnection | null, fallback: string): void {
+        if (!conn) return;
+        try {
+            conn.close();
+        } catch (err) {
+            console.warn(fallback, err);
+            if (!this.destroyed) {
+                this.events.onError?.(errorMessage(err, fallback));
+            }
+        }
+    }
+
+    private reportError(err: unknown, fallback: string): void {
+        const message = errorMessage(err, fallback);
+        console.error('[webrtcSync]', message, err);
+        this.events.onStateChange?.('error');
+        this.events.onError?.(message);
     }
 }
