@@ -12,7 +12,10 @@
         "commit": "cz",
         "commitlint": "commitlint --edit",
         "lint-staged": "lint-staged",
-        "prepare": "node .husky/install.mjs"
+        "prepare": "node .husky/install.mjs",
+        "cy:open": "cypress open --component",
+        "cy:run": "cypress run --component --browser chrome",
+        "test": "cypress run --component --browser chrome"
     },
     "dependencies": {
         "@tailwindcss/vite": "^4.3.2",
@@ -39,6 +42,7 @@
         "@vitejs/plugin-react": "^6.0.3",
         "babel-plugin-react-compiler": "^1.0.0",
         "commitizen": "^4.3.2",
+        "cypress": "^15.18.1",
         "cz-conventional-changelog": "^3.3.0",
         "eslint": "^10.6.0",
         "eslint-plugin-react-hooks": "^7.1.1",
