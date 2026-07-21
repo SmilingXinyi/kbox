@@ -50,6 +50,7 @@
         "globals": "^17.7.0",
         "husky": "^9.1.7",
         "lint-staged": "^15.5.2",
+        "playwright": "^1.61.1",
         "prettier": "~3.5.3",
         "tailwindcss": "^4.3.2",
         "typescript": "~6.0.2",
