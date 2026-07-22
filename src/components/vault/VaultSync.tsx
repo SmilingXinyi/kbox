@@ -65,13 +65,27 @@ export default function VaultSync({isOpen, onClose, sync, isUnlocked, onRequestU
         }
     };
 
+    const handleClose = () => {
+        sync.stop();
+        setManualPeerId('');
+        setScanError(null);
+        onClose();
+    };
+
+    const handleStop = () => {
+        setScanError(null);
+        sync.stop();
+    };
+
     useEffect(() => {
         if (!isOpen) return;
         const onKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') onClose();
+            if (e.key === 'Escape') handleClose();
         };
         window.addEventListener('keydown', onKeyDown);
         return () => window.removeEventListener('keydown', onKeyDown);
+        // handleClose uses sync.stop (ref-backed); omit from deps to avoid rebinding every render.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOpen, onClose]);
 
     useEffect(() => {
@@ -143,13 +157,6 @@ export default function VaultSync({isOpen, onClose, sync, isUnlocked, onRequestU
             void stopScanner();
         };
     }, [isOpen, sync.sessionState]);
-
-    const handleClose = () => {
-        sync.stop();
-        setManualPeerId('');
-        setScanError(null);
-        onClose();
-    };
 
     const ensureUnlocked = () => {
         if (isUnlocked) return true;
@@ -360,7 +367,7 @@ export default function VaultSync({isOpen, onClose, sync, isUnlocked, onRequestU
                                     </div>
                                     <button
                                         type="button"
-                                        onClick={sync.stop}
+                                        onClick={handleStop}
                                         className="w-full inline-flex items-center justify-center gap-2 py-2.5 border border-surface-700 text-surface-300 rounded-lg text-sm cursor-pointer hover:bg-surface-800 transition"
                                     >
                                         <Unplug className="w-4 h-4" />
@@ -398,7 +405,7 @@ export default function VaultSync({isOpen, onClose, sync, isUnlocked, onRequestU
                                 </form>
                                 <button
                                     type="button"
-                                    onClick={sync.stop}
+                                    onClick={handleStop}
                                     className="w-full py-2.5 border border-surface-700 text-surface-300 rounded-lg text-sm cursor-pointer hover:bg-surface-800 transition"
                                 >
                                     Cancel
@@ -505,7 +512,7 @@ export default function VaultSync({isOpen, onClose, sync, isUnlocked, onRequestU
 
                                 <button
                                     type="button"
-                                    onClick={sync.stop}
+                                    onClick={handleStop}
                                     className="w-full inline-flex items-center justify-center gap-2 py-2.5 border border-surface-700 text-surface-300 rounded-lg text-sm cursor-pointer hover:bg-surface-800 transition"
                                 >
                                     <Unplug className="w-4 h-4" />
