@@ -1,5 +1,4 @@
 import {useEffect, useRef, useState} from 'react';
-import {AnimatePresence, motion} from 'motion/react';
 import {
     ArrowDownToLine,
     ArrowUpFromLine,
@@ -9,12 +8,14 @@ import {
     QrCode,
     Radio,
     RefreshCw,
-    Unplug,
-    X
+    Unplug
 } from 'lucide-react';
 import {Html5Qrcode} from 'html5-qrcode';
 import type {UseWebRTCSyncReturn} from '../../hooks/useWebRTCSync';
 import type {SyncStrategy} from '../../types/sync';
+import Modal from '../ui/Modal';
+import Alert from '../ui/Alert';
+import Button from '../ui/Button';
 
 type VaultSyncProps = {
     isOpen: boolean;
@@ -45,7 +46,6 @@ export default function VaultSync({isOpen, onClose, sync, isUnlocked, onRequestU
         const scanner = scannerRef.current;
         if (!scanner) return;
 
-        // A newer start() may have already replaced this instance.
         if (expectedGeneration != null && scannerGenerationRef.current !== expectedGeneration) {
             return;
         }
@@ -58,7 +58,6 @@ export default function VaultSync({isOpen, onClose, sync, isUnlocked, onRequestU
             }
             scanner.clear();
         } catch (err) {
-            // Common when the camera track is already gone; keep a breadcrumb for harder races.
             console.warn('QR scanner stop/clear failed:', err);
         } finally {
             scannerStoppingRef.current = false;
@@ -82,22 +81,10 @@ export default function VaultSync({isOpen, onClose, sync, isUnlocked, onRequestU
         stopRef.current();
     };
 
-    // Safety net: tear down WebRTC if the panel closes without handleClose.
     useEffect(() => {
         if (isOpen) return;
         stopRef.current();
     }, [isOpen]);
-
-    useEffect(() => {
-        if (!isOpen) return;
-        const onKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') handleClose();
-        };
-        window.addEventListener('keydown', onKeyDown);
-        return () => window.removeEventListener('keydown', onKeyDown);
-        // handleClose uses stopRef; omit from deps to avoid rebinding every render.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isOpen, onClose]);
 
     useEffect(() => {
         if (!isOpen || sync.sessionState !== 'scanning') {
@@ -113,7 +100,6 @@ export default function VaultSync({isOpen, onClose, sync, isUnlocked, onRequestU
             if (cancelled || scannerGenerationRef.current !== generation) return;
 
             try {
-                // Ensure any prior camera session is fully released before starting again.
                 await stopScanner();
                 if (cancelled || scannerGenerationRef.current !== generation) return;
 
@@ -144,7 +130,6 @@ export default function VaultSync({isOpen, onClose, sync, isUnlocked, onRequestU
                     }
                 );
 
-                // If we were cancelled while awaiting start(), shut the camera back down.
                 if (cancelled || scannerGenerationRef.current !== generation) {
                     void stopScanner(generation);
                 }
@@ -162,8 +147,6 @@ export default function VaultSync({isOpen, onClose, sync, isUnlocked, onRequestU
 
         return () => {
             cancelled = true;
-            // Bump generation so in-flight start()/decode callbacks become no-ops,
-            // then stop whatever camera instance is currently held (no generation gate).
             scannerGenerationRef.current += 1;
             void stopScanner();
         };
@@ -232,344 +215,263 @@ export default function VaultSync({isOpen, onClose, sync, isUnlocked, onRequestU
     })();
 
     return (
-        <AnimatePresence>
-            {isOpen && (
-                <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-                    <motion.button
+        <Modal
+            isOpen={isOpen}
+            onClose={handleClose}
+            title="Device sync"
+            description="Peer-to-peer WebRTC transfer. Secrets stay on-device and move only over the encrypted data channel."
+        >
+            {!isUnlocked && (
+                <Alert
+                    tone="warn"
+                    className="mb-4"
+                    action={
+                        <button type="button" onClick={onRequestUnlock} className="underline cursor-pointer pressable">
+                            Unlock now
+                        </button>
+                    }
+                >
+                    Unlock the vault before starting sync so secrets can be transferred safely.
+                </Alert>
+            )}
+
+            <div className="mb-4 flex items-center gap-2 text-xs text-surface-300">
+                {(sync.sessionState === 'starting' ||
+                    sync.sessionState === 'connecting' ||
+                    sync.sessionState === 'syncing') && <Loader2 className="w-3.5 h-3.5 text-accent animate-spin" />}
+                {sync.sessionState === 'synced' && <CheckCircle2 className="w-3.5 h-3.5 text-accent" />}
+                {sync.sessionState === 'waiting' && <Radio className="w-3.5 h-3.5 text-accent animate-pulse" />}
+                <span>{statusLabel}</span>
+            </div>
+
+            {(sync.error || scanError) && (
+                <Alert
+                    tone="error"
+                    className="mb-4"
+                    action={
+                        <button
+                            type="button"
+                            onClick={() => {
+                                sync.clearError();
+                                setScanError(null);
+                            }}
+                            className="underline cursor-pointer pressable"
+                        >
+                            Dismiss
+                        </button>
+                    }
+                >
+                    {sync.error ?? scanError}
+                </Alert>
+            )}
+
+            {(sync.sessionState === 'idle' || sync.sessionState === 'closed' || sync.sessionState === 'error') && (
+                <div className="space-y-3">
+                    <button
                         type="button"
-                        aria-label="Close sync backdrop"
-                        initial={{opacity: 0}}
-                        animate={{opacity: 1}}
-                        exit={{opacity: 0}}
-                        className="absolute inset-0 bg-surface-950/80 backdrop-blur-sm cursor-pointer"
-                        onClick={handleClose}
-                    />
-                    <motion.div
-                        role="dialog"
-                        aria-modal="true"
-                        aria-labelledby="vault-sync-title"
-                        initial={{opacity: 0, y: 24}}
-                        animate={{opacity: 1, y: 0}}
-                        exit={{opacity: 0, y: 16}}
-                        className="relative w-full sm:max-w-md max-h-[92dvh] overflow-y-auto bg-surface-900 border border-surface-700 rounded-t-2xl sm:rounded-2xl p-5 sm:p-6"
+                        onClick={handleStartHost}
+                        disabled={!isUnlocked}
+                        className="w-full flex items-center gap-3 p-3 min-h-14 rounded-lg border border-surface-700 hover:border-accent/40 hover:bg-accent-muted text-left cursor-pointer pressable transition disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                        <div className="flex items-start justify-between mb-4">
-                            <div>
-                                <h2 id="vault-sync-title" className="text-lg font-semibold text-surface-100">
-                                    Device sync
-                                </h2>
-                                <p className="text-[11px] text-surface-400 mt-1 leading-relaxed">
-                                    Peer-to-peer WebRTC transfer. Secrets stay on-device and move only over the
-                                    encrypted data channel.
-                                </p>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={handleClose}
-                                className="p-1.5 text-surface-400 hover:text-surface-100 hover:bg-surface-800 rounded-lg cursor-pointer"
-                                aria-label="Close"
-                            >
-                                <X className="w-4 h-4" />
-                            </button>
+                        <div className="p-2 rounded-lg bg-surface-800 text-accent">
+                            <QrCode className="w-4 h-4" aria-hidden />
                         </div>
-
-                        {!isUnlocked && (
-                            <div className="mb-4 p-3 rounded-lg border border-warn/30 bg-warn/10 text-warn text-xs">
-                                Unlock the vault before starting sync so secrets can be transferred safely.
-                                <button
-                                    type="button"
-                                    onClick={onRequestUnlock}
-                                    className="block mt-2 underline cursor-pointer"
-                                >
-                                    Unlock now
-                                </button>
-                            </div>
-                        )}
-
-                        <div className="mb-4 flex items-center gap-2 text-xs text-surface-300">
-                            {(sync.sessionState === 'starting' ||
-                                sync.sessionState === 'connecting' ||
-                                sync.sessionState === 'syncing') && (
-                                <Loader2 className="w-3.5 h-3.5 text-accent animate-spin" />
-                            )}
-                            {sync.sessionState === 'synced' && <CheckCircle2 className="w-3.5 h-3.5 text-accent" />}
-                            {sync.sessionState === 'waiting' && (
-                                <Radio className="w-3.5 h-3.5 text-accent animate-pulse" />
-                            )}
-                            <span>{statusLabel}</span>
+                        <span>
+                            <span className="block text-sm text-surface-100">Enable sync service</span>
+                            <span className="block text-[11px] text-surface-400 mt-0.5">
+                                Show a QR code for the other device to scan (device A)
+                            </span>
+                        </span>
+                    </button>
+                    <button
+                        type="button"
+                        onClick={handleStartScan}
+                        disabled={!isUnlocked}
+                        className="w-full flex items-center gap-3 p-3 min-h-14 rounded-lg border border-surface-700 hover:border-accent/40 hover:bg-accent-muted text-left cursor-pointer pressable transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        <div className="p-2 rounded-lg bg-surface-800 text-accent">
+                            <Camera className="w-4 h-4" aria-hidden />
                         </div>
-
-                        {(sync.error || scanError) && (
-                            <div className="mb-4 p-3 rounded-lg border border-danger/30 bg-danger-muted text-danger text-xs">
-                                <p>{sync.error ?? scanError}</p>
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        sync.clearError();
-                                        setScanError(null);
-                                    }}
-                                    className="mt-1 underline cursor-pointer"
-                                >
-                                    Dismiss
-                                </button>
-                            </div>
-                        )}
-
-                        {sync.sessionState === 'idle' ||
-                        sync.sessionState === 'closed' ||
-                        sync.sessionState === 'error' ? (
-                            <div className="space-y-3">
-                                <button
-                                    type="button"
-                                    onClick={handleStartHost}
-                                    disabled={!isUnlocked}
-                                    className="w-full flex items-center gap-3 p-3 rounded-lg border border-surface-700 hover:border-accent/40 hover:bg-accent-muted text-left cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    <div className="p-2 rounded-lg bg-surface-800 text-accent">
-                                        <QrCode className="w-4 h-4" />
-                                    </div>
-                                    <span>
-                                        <span className="block text-sm text-surface-100">Enable sync service</span>
-                                        <span className="block text-[11px] text-surface-400 mt-0.5">
-                                            Show a QR code for the other device to scan (device A)
-                                        </span>
-                                    </span>
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={handleStartScan}
-                                    disabled={!isUnlocked}
-                                    className="w-full flex items-center gap-3 p-3 rounded-lg border border-surface-700 hover:border-accent/40 hover:bg-accent-muted text-left cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    <div className="p-2 rounded-lg bg-surface-800 text-accent">
-                                        <Camera className="w-4 h-4" />
-                                    </div>
-                                    <span>
-                                        <span className="block text-sm text-surface-100">Scan to join</span>
-                                        <span className="block text-[11px] text-surface-400 mt-0.5">
-                                            Scan the host QR code on this device (device B)
-                                        </span>
-                                    </span>
-                                </button>
-                            </div>
-                        ) : null}
-
-                        {(sync.sessionState === 'starting' || sync.sessionState === 'waiting') &&
-                            sync.role === 'host' && (
-                                <div className="space-y-4">
-                                    <div className="flex flex-col items-center gap-3 p-4 rounded-xl border border-surface-700 bg-surface-950">
-                                        {sync.qrDataUrl ? (
-                                            <img
-                                                src={sync.qrDataUrl}
-                                                alt="Sync QR code"
-                                                className="w-56 h-56 rounded-lg bg-surface-100"
-                                            />
-                                        ) : (
-                                            <div className="w-56 h-56 flex items-center justify-center">
-                                                <Loader2 className="w-6 h-6 text-accent animate-spin" />
-                                            </div>
-                                        )}
-                                        <p className="text-[11px] text-surface-400 text-center">
-                                            Scan with the other device running kbox. Peer ID:
-                                        </p>
-                                        <code className="text-[10px] font-mono text-accent break-all text-center">
-                                            {sync.peerId ?? '…'}
-                                        </code>
-                                    </div>
-                                    <button
-                                        type="button"
-                                        onClick={handleStop}
-                                        className="w-full inline-flex items-center justify-center gap-2 py-2.5 border border-surface-700 text-surface-300 rounded-lg text-sm cursor-pointer hover:bg-surface-800 transition"
-                                    >
-                                        <Unplug className="w-4 h-4" />
-                                        Stop service
-                                    </button>
-                                </div>
-                            )}
-
-                        {sync.sessionState === 'scanning' && (
-                            <div className="space-y-4">
-                                <div
-                                    id={SCANNER_REGION_ID}
-                                    className="overflow-hidden rounded-xl border border-surface-700 bg-surface-950 min-h-[220px]"
-                                />
-                                <form onSubmit={handleManualConnect} className="space-y-2">
-                                    <label className="block text-[11px] text-surface-400">
-                                        Or paste peer ID manually
-                                    </label>
-                                    <div className="flex gap-2">
-                                        <input
-                                            type="text"
-                                            value={manualPeerId}
-                                            onChange={e => setManualPeerId(e.target.value)}
-                                            placeholder="Peer ID from host QR"
-                                            className="flex-1 px-3 py-2 bg-surface-950 border border-surface-700 rounded-lg text-xs font-mono text-surface-100 placeholder:text-surface-500 focus:outline-none focus:border-accent transition"
-                                        />
-                                        <button
-                                            type="submit"
-                                            disabled={!manualPeerId.trim()}
-                                            className="px-3 py-2 bg-accent hover:bg-accent-dim text-surface-950 text-xs font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition"
-                                        >
-                                            Connect
-                                        </button>
-                                    </div>
-                                </form>
-                                <button
-                                    type="button"
-                                    onClick={handleStop}
-                                    className="w-full py-2.5 border border-surface-700 text-surface-300 rounded-lg text-sm cursor-pointer hover:bg-surface-800 transition"
-                                >
-                                    Cancel
-                                </button>
-                            </div>
-                        )}
-
-                        {(sync.sessionState === 'connecting' ||
-                            sync.sessionState === 'connected' ||
-                            sync.sessionState === 'syncing' ||
-                            sync.sessionState === 'synced') && (
-                            <div className="space-y-4">
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div className="p-3 rounded-lg border border-surface-700 bg-surface-950">
-                                        <p className="text-[10px] uppercase tracking-wide text-surface-400">
-                                            This device
-                                        </p>
-                                        <p className="text-sm text-surface-100 mt-1">
-                                            {sync.localItemCount} key{sync.localItemCount === 1 ? '' : 's'}
-                                        </p>
-                                        <p className="text-[10px] text-surface-500 mt-0.5">
-                                            {sync.role === 'host' ? 'Host (A)' : 'Guest (B)'}
-                                        </p>
-                                    </div>
-                                    <div className="p-3 rounded-lg border border-surface-700 bg-surface-950">
-                                        <p className="text-[10px] uppercase tracking-wide text-surface-400">Peer</p>
-                                        <p className="text-sm text-surface-100 mt-1">
-                                            {sync.remote
-                                                ? `${sync.remote.itemCount} key${sync.remote.itemCount === 1 ? '' : 's'}`
-                                                : '…'}
-                                        </p>
-                                        <p className="text-[10px] text-surface-500 mt-0.5">
-                                            {sync.remote
-                                                ? sync.remote.role === 'host'
-                                                    ? 'Host (A)'
-                                                    : 'Guest (B)'
-                                                : 'Negotiating'}
-                                        </p>
-                                    </div>
-                                </div>
-
-                                {sync.sessionState === 'synced' && (
-                                    <div className="flex items-start gap-2 p-3 rounded-lg border border-accent/30 bg-accent-muted text-accent text-xs">
-                                        <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
-                                        <p>
-                                            Sync finished
-                                            {sync.lastSyncedCount != null
-                                                ? ` — ${sync.lastSyncedCount} item${sync.lastSyncedCount === 1 ? '' : 's'} applied.`
-                                                : '.'}
-                                        </p>
-                                    </div>
-                                )}
-
-                                {sync.role === 'host' &&
-                                    (sync.sessionState === 'connected' || sync.sessionState === 'synced') && (
-                                        <div className="space-y-2">
-                                            <p className="text-[11px] text-surface-400">Merge strategy</p>
-                                            <button
-                                                type="button"
-                                                onClick={() => handleStrategy('a-overwrites-b')}
-                                                className="w-full flex items-start gap-3 p-3 rounded-lg border border-surface-700 hover:border-accent/40 hover:bg-accent-muted text-left cursor-pointer transition"
-                                            >
-                                                <ArrowUpFromLine className="w-4 h-4 text-accent mt-0.5 shrink-0" />
-                                                <span>
-                                                    <span className="block text-sm text-surface-100">
-                                                        A overwrites B
-                                                    </span>
-                                                    <span className="block text-[11px] text-surface-400 mt-0.5">
-                                                        Push this vault to the other device
-                                                    </span>
-                                                </span>
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => handleStrategy('b-overwrites-a')}
-                                                className="w-full flex items-start gap-3 p-3 rounded-lg border border-surface-700 hover:border-accent/40 hover:bg-accent-muted text-left cursor-pointer transition"
-                                            >
-                                                <ArrowDownToLine className="w-4 h-4 text-accent mt-0.5 shrink-0" />
-                                                <span>
-                                                    <span className="block text-sm text-surface-100">
-                                                        Read B, overwrite A
-                                                    </span>
-                                                    <span className="block text-[11px] text-surface-400 mt-0.5">
-                                                        Pull the other vault onto this device
-                                                    </span>
-                                                </span>
-                                            </button>
-                                        </div>
-                                    )}
-
-                                {sync.role === 'guest' && sync.pendingIncoming && (
-                                    <div className="space-y-3 p-3 rounded-lg border border-warn/40 bg-warn/10">
-                                        <p className="text-xs text-warn leading-relaxed">
-                                            {sync.pendingIncoming.strategy === 'a-overwrites-b'
-                                                ? `The host wants to replace THIS vault with theirs (${sync.pendingIncoming.items.length} key${sync.pendingIncoming.items.length === 1 ? '' : 's'}). Your local keys will be deleted.`
-                                                : 'The host wants to pull THIS vault onto their device. Your secrets will be sent over the linked channel.'}
-                                        </p>
-                                        <div className="flex gap-2">
-                                            <button
-                                                type="button"
-                                                onClick={() => void sync.acceptIncomingSync()}
-                                                className="flex-1 py-2 bg-accent hover:bg-accent-dim text-surface-950 text-xs font-medium rounded-lg cursor-pointer transition"
-                                            >
-                                                {sync.pendingIncoming.strategy === 'a-overwrites-b'
-                                                    ? 'Accept overwrite'
-                                                    : 'Send my vault'}
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => sync.rejectIncomingSync()}
-                                                className="flex-1 py-2 border border-surface-700 text-surface-300 text-xs rounded-lg cursor-pointer hover:bg-surface-800 transition"
-                                            >
-                                                Reject
-                                            </button>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {sync.role === 'guest' &&
-                                    sync.sessionState === 'connected' &&
-                                    !sync.pendingIncoming && (
-                                        <p className="text-[11px] text-surface-400 leading-relaxed">
-                                            Connected. Wait for the host to choose a merge strategy. You will be asked
-                                            to confirm before any keys are sent or replaced.
-                                        </p>
-                                    )}
-
-                                {sync.role === 'guest' && sync.sessionState === 'syncing' && !sync.pendingIncoming && (
-                                    <p className="text-[11px] text-surface-400 leading-relaxed">
-                                        Waiting for the host to finish applying the transfer…
-                                    </p>
-                                )}
-
-                                {sync.sessionState === 'syncing' && (
-                                    <div className="flex items-center justify-center gap-2 py-2 text-xs text-surface-300">
-                                        <RefreshCw className="w-3.5 h-3.5 animate-spin text-accent" />
-                                        Transferring encrypted channel payload…
-                                    </div>
-                                )}
-
-                                <button
-                                    type="button"
-                                    onClick={handleStop}
-                                    className="w-full inline-flex items-center justify-center gap-2 py-2.5 border border-surface-700 text-surface-300 rounded-lg text-sm cursor-pointer hover:bg-surface-800 transition"
-                                >
-                                    <Unplug className="w-4 h-4" />
-                                    Disconnect
-                                </button>
-                            </div>
-                        )}
-                    </motion.div>
+                        <span>
+                            <span className="block text-sm text-surface-100">Scan to join</span>
+                            <span className="block text-[11px] text-surface-400 mt-0.5">
+                                Scan the host QR code on this device (device B)
+                            </span>
+                        </span>
+                    </button>
                 </div>
             )}
-        </AnimatePresence>
+
+            {(sync.sessionState === 'starting' || sync.sessionState === 'waiting') && sync.role === 'host' && (
+                <div className="space-y-4">
+                    <div className="flex flex-col items-center gap-3 p-4 rounded-xl border border-surface-700 bg-surface-950">
+                        {sync.qrDataUrl ? (
+                            <img
+                                src={sync.qrDataUrl}
+                                alt="Sync QR code"
+                                className="w-full max-w-56 aspect-square rounded-lg bg-surface-100"
+                            />
+                        ) : (
+                            <div className="w-56 h-56 flex items-center justify-center">
+                                <Loader2 className="w-6 h-6 text-accent animate-spin" />
+                            </div>
+                        )}
+                        <p className="text-[11px] text-surface-400 text-center">
+                            Scan with the other device running kbox. Peer ID:
+                        </p>
+                        <code className="text-[10px] font-mono text-accent break-all text-center">
+                            {sync.peerId ?? '…'}
+                        </code>
+                    </div>
+                    <Button variant="secondary" fullWidth onClick={handleStop}>
+                        <Unplug className="w-4 h-4" aria-hidden />
+                        Stop service
+                    </Button>
+                </div>
+            )}
+
+            {sync.sessionState === 'scanning' && (
+                <div className="space-y-4">
+                    <div
+                        id={SCANNER_REGION_ID}
+                        className="overflow-hidden rounded-xl border border-surface-700 bg-surface-950 min-h-[220px]"
+                    />
+                    <form onSubmit={handleManualConnect} className="space-y-2">
+                        <label className="block text-[11px] text-surface-400">Or paste peer ID manually</label>
+                        <div className="flex flex-col sm:flex-row gap-2">
+                            <input
+                                type="text"
+                                value={manualPeerId}
+                                onChange={e => setManualPeerId(e.target.value)}
+                                placeholder="Peer ID from host QR"
+                                className="flex-1 min-h-11 px-3 py-2 bg-surface-950 border border-surface-700 rounded-lg text-xs font-mono text-surface-100 placeholder:text-surface-500 focus:outline-none focus:border-accent transition"
+                            />
+                            <Button type="submit" disabled={!manualPeerId.trim()} className="sm:w-auto">
+                                Connect
+                            </Button>
+                        </div>
+                    </form>
+                    <Button variant="secondary" fullWidth onClick={handleStop}>
+                        Cancel
+                    </Button>
+                </div>
+            )}
+
+            {(sync.sessionState === 'connecting' ||
+                sync.sessionState === 'connected' ||
+                sync.sessionState === 'syncing' ||
+                sync.sessionState === 'synced') && (
+                <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-3">
+                        <div className="p-3 rounded-lg border border-surface-700 bg-surface-950">
+                            <p className="text-[10px] uppercase tracking-wide text-surface-400">This device</p>
+                            <p className="text-sm text-surface-100 mt-1">
+                                {sync.localItemCount} key{sync.localItemCount === 1 ? '' : 's'}
+                            </p>
+                            <p className="text-[10px] text-surface-500 mt-0.5">
+                                {sync.role === 'host' ? 'Host (A)' : 'Guest (B)'}
+                            </p>
+                        </div>
+                        <div className="p-3 rounded-lg border border-surface-700 bg-surface-950">
+                            <p className="text-[10px] uppercase tracking-wide text-surface-400">Peer</p>
+                            <p className="text-sm text-surface-100 mt-1">
+                                {sync.remote
+                                    ? `${sync.remote.itemCount} key${sync.remote.itemCount === 1 ? '' : 's'}`
+                                    : '…'}
+                            </p>
+                            <p className="text-[10px] text-surface-500 mt-0.5">
+                                {sync.remote ? (sync.remote.role === 'host' ? 'Host (A)' : 'Guest (B)') : 'Negotiating'}
+                            </p>
+                        </div>
+                    </div>
+
+                    {sync.sessionState === 'synced' && (
+                        <Alert tone="success">
+                            Sync finished
+                            {sync.lastSyncedCount != null
+                                ? ` — ${sync.lastSyncedCount} item${sync.lastSyncedCount === 1 ? '' : 's'} applied.`
+                                : '.'}
+                        </Alert>
+                    )}
+
+                    {sync.role === 'host' && (sync.sessionState === 'connected' || sync.sessionState === 'synced') && (
+                        <div className="space-y-2">
+                            <p className="text-[11px] text-surface-400">Merge strategy</p>
+                            <button
+                                type="button"
+                                onClick={() => handleStrategy('a-overwrites-b')}
+                                className="w-full flex items-start gap-3 p-3 min-h-14 rounded-lg border border-surface-700 hover:border-accent/40 hover:bg-accent-muted text-left cursor-pointer pressable transition"
+                            >
+                                <ArrowUpFromLine className="w-4 h-4 text-accent mt-0.5 shrink-0" aria-hidden />
+                                <span>
+                                    <span className="block text-sm text-surface-100">A overwrites B</span>
+                                    <span className="block text-[11px] text-surface-400 mt-0.5">
+                                        Push this vault to the other device
+                                    </span>
+                                </span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handleStrategy('b-overwrites-a')}
+                                className="w-full flex items-start gap-3 p-3 min-h-14 rounded-lg border border-surface-700 hover:border-accent/40 hover:bg-accent-muted text-left cursor-pointer pressable transition"
+                            >
+                                <ArrowDownToLine className="w-4 h-4 text-accent mt-0.5 shrink-0" aria-hidden />
+                                <span>
+                                    <span className="block text-sm text-surface-100">Read B, overwrite A</span>
+                                    <span className="block text-[11px] text-surface-400 mt-0.5">
+                                        Pull the other vault onto this device
+                                    </span>
+                                </span>
+                            </button>
+                        </div>
+                    )}
+
+                    {sync.role === 'guest' && sync.pendingIncoming && (
+                        <div className="space-y-3">
+                            <Alert tone="warn">
+                                {sync.pendingIncoming.strategy === 'a-overwrites-b'
+                                    ? `The host wants to replace THIS vault with theirs (${sync.pendingIncoming.items.length} key${sync.pendingIncoming.items.length === 1 ? '' : 's'}). Your local keys will be deleted.`
+                                    : 'The host wants to pull THIS vault onto their device. Your secrets will be sent over the linked channel.'}
+                            </Alert>
+                            <div className="flex flex-col-reverse sm:flex-row gap-2">
+                                <Button variant="secondary" fullWidth onClick={() => sync.rejectIncomingSync()}>
+                                    Reject
+                                </Button>
+                                <Button fullWidth onClick={() => void sync.acceptIncomingSync()}>
+                                    {sync.pendingIncoming.strategy === 'a-overwrites-b'
+                                        ? 'Accept overwrite'
+                                        : 'Send my vault'}
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+
+                    {sync.role === 'guest' && sync.sessionState === 'connected' && !sync.pendingIncoming && (
+                        <p className="text-[11px] text-surface-400 leading-relaxed">
+                            Connected. Wait for the host to choose a merge strategy. You will be asked to confirm before
+                            any keys are sent or replaced.
+                        </p>
+                    )}
+
+                    {sync.role === 'guest' && sync.sessionState === 'syncing' && !sync.pendingIncoming && (
+                        <p className="text-[11px] text-surface-400 leading-relaxed">
+                            Waiting for the host to finish applying the transfer…
+                        </p>
+                    )}
+
+                    {sync.sessionState === 'syncing' && (
+                        <div className="flex items-center justify-center gap-2 py-2 text-xs text-surface-300">
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin text-accent" aria-hidden />
+                            Transferring encrypted channel payload…
+                        </div>
+                    )}
+
+                    <Button variant="secondary" fullWidth onClick={handleStop}>
+                        <Unplug className="w-4 h-4" aria-hidden />
+                        Disconnect
+                    </Button>
+                </div>
+            )}
+        </Modal>
     );
 }

@@ -1,9 +1,12 @@
-import {useState} from 'react';
+import {useEffect, useState} from 'react';
 import {motion} from 'motion/react';
-import {AlertCircle, Fingerprint, Key, Lock, RefreshCw, X} from 'lucide-react';
+import {Fingerprint, Key, Lock, RefreshCw, X} from 'lucide-react';
 import type {VaultMetadata, ResidualUnlockResult} from '../../types/vault';
 import {PIN_MAX_LENGTH} from '../../lib/crypto';
 import BiometricSimulator from './BiometricSimulator';
+import Alert from '../ui/Alert';
+import Button from '../ui/Button';
+import TextField from '../ui/TextField';
 
 type VaultUnlockProps = {
     metadata: VaultMetadata;
@@ -24,6 +27,14 @@ export default function VaultUnlock({
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [showSimulator, setShowSimulator] = useState(false);
+
+    useEffect(() => {
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape' && !showSimulator) onClose();
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, [onClose, showSimulator]);
 
     const handlePinUnlock = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -65,83 +76,86 @@ export default function VaultUnlock({
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-surface-950/80 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-surface-950/85 backdrop-blur-[2px]">
             <motion.div
-                initial={{opacity: 0, scale: 0.97}}
-                animate={{opacity: 1, scale: 1}}
-                transition={{duration: 0.25}}
-                className="w-full max-w-md p-6 bg-surface-900 border border-surface-700 rounded-2xl relative"
+                initial={{opacity: 0, y: 24, scale: 0.98}}
+                animate={{opacity: 1, y: 0, scale: 1}}
+                transition={{duration: 0.28, ease: [0.32, 0.72, 0, 1]}}
+                className="w-full sm:max-w-md overflow-hidden bg-surface-900 border border-surface-700 border-b-0 sm:border-b rounded-t-2xl sm:rounded-2xl relative"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="vault-unlock-title"
             >
-                <button
-                    type="button"
-                    onClick={onClose}
-                    className="absolute top-4 right-4 p-1.5 text-surface-400 hover:text-surface-100 hover:bg-surface-800 rounded-lg transition cursor-pointer"
-                    aria-label="Cancel"
-                >
-                    <X className="w-4 h-4" />
-                </button>
+                <div className="h-1 hazard-stripe" aria-hidden />
 
-                <div className="flex flex-col items-center mb-6 text-center">
-                    <div className="p-3.5 bg-accent-muted border border-accent/25 rounded-xl text-accent mb-3">
-                        <Lock className="w-7 h-7" />
-                    </div>
-                    <h2 className="text-lg font-semibold text-surface-100">Authenticate to continue</h2>
-                    <p className="text-xs text-surface-400 mt-1.5 max-w-xs leading-relaxed">
-                        Enter your PIN or use biometrics to reveal or edit secrets.
-                    </p>
-                </div>
-
-                {error && (
-                    <div className="p-3 mb-4 bg-danger-muted border border-danger/25 text-danger text-xs rounded-lg flex items-start gap-2">
-                        <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
-                        <span>{error}</span>
-                    </div>
-                )}
-
-                {metadata.hasWebAuthn && (
+                <div className="p-5 sm:p-6 safe-pb relative">
                     <button
                         type="button"
-                        disabled={loading}
-                        onClick={() => void handleBiometricUnlock()}
-                        className="w-full mb-3 py-2.5 bg-surface-800 hover:bg-surface-700 border border-surface-600 text-surface-100 rounded-lg text-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 transition"
+                        onClick={onClose}
+                        className="absolute top-3 right-3 p-2.5 min-h-11 min-w-11 inline-flex items-center justify-center text-surface-400 hover:text-surface-100 hover:bg-surface-800 rounded-lg transition cursor-pointer pressable"
+                        aria-label="Cancel"
                     >
-                        <Fingerprint className="w-4 h-4 text-accent" />
-                        <span>Unlock with biometrics</span>
+                        <X className="w-4 h-4" />
                     </button>
-                )}
 
-                <form onSubmit={handlePinUnlock} className="space-y-3">
-                    <div className="space-y-1.5">
-                        <label className="text-xs font-medium text-surface-300 flex items-center gap-1">
-                            <Key className="w-3 h-3 text-surface-400" />
-                            <span>Security PIN</span>
-                        </label>
-                        <input
+                    <div className="flex flex-col items-center mb-6 text-center pt-1">
+                        <div className="p-3.5 bg-accent-muted border border-accent/30 rounded-xl text-accent mb-3">
+                            <Lock className="w-7 h-7" aria-hidden />
+                        </div>
+                        <h2 id="vault-unlock-title" className="font-display text-lg font-semibold text-surface-100">
+                            Authenticate to continue
+                        </h2>
+                        <p className="text-xs text-surface-400 mt-1.5 max-w-xs leading-relaxed">
+                            Enter your PIN or use biometrics to reveal or edit secrets.
+                        </p>
+                    </div>
+
+                    {error && (
+                        <Alert tone="error" className="mb-4">
+                            {error}
+                        </Alert>
+                    )}
+
+                    {metadata.hasWebAuthn && (
+                        <Button
+                            variant="secondary"
+                            fullWidth
+                            disabled={loading}
+                            className="mb-3"
+                            onClick={() => void handleBiometricUnlock()}
+                        >
+                            <Fingerprint className="w-4 h-4 text-accent" aria-hidden />
+                            Unlock with biometrics
+                        </Button>
+                    )}
+
+                    <form onSubmit={handlePinUnlock} className="space-y-3">
+                        <TextField
+                            label="Security PIN"
+                            trailingLabel={<Key className="w-3 h-3 text-surface-400" aria-hidden />}
                             type="password"
+                            inputMode="numeric"
+                            autoComplete="current-password"
                             maxLength={PIN_MAX_LENGTH}
                             value={pin}
                             onChange={e => setPin(e.target.value)}
                             placeholder="••••••"
                             autoFocus
-                            className="w-full px-3 py-2 bg-surface-950 border border-surface-700 rounded-lg text-sm text-surface-100 placeholder:text-surface-600 focus:outline-none focus:border-accent font-mono text-center tracking-widest transition"
+                            className="[&_input]:font-mono [&_input]:text-center [&_input]:tracking-widest"
                         />
-                    </div>
 
-                    <button
-                        type="submit"
-                        disabled={loading || !pin}
-                        className="w-full py-2.5 bg-accent hover:bg-accent-dim text-surface-950 font-medium rounded-lg text-sm flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 transition"
-                    >
-                        {loading ? (
-                            <>
-                                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                                <span>Unlocking…</span>
-                            </>
-                        ) : (
-                            <span>Unlock</span>
-                        )}
-                    </button>
-                </form>
+                        <Button type="submit" fullWidth disabled={loading || !pin}>
+                            {loading ? (
+                                <>
+                                    <RefreshCw className="w-3.5 h-3.5 animate-spin" aria-hidden />
+                                    Unlocking…
+                                </>
+                            ) : (
+                                'Unlock'
+                            )}
+                        </Button>
+                    </form>
+                </div>
 
                 <BiometricSimulator
                     isOpen={showSimulator}

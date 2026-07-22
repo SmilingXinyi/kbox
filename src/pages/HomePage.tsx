@@ -1,18 +1,6 @@
 import {useState} from 'react';
 import {AnimatePresence, motion} from 'motion/react';
-import {
-    CheckCircle,
-    FolderOpen,
-    Lock,
-    Plus,
-    Radio,
-    RefreshCw,
-    Search,
-    Settings,
-    ShieldAlert,
-    Sparkles,
-    Unlock
-} from 'lucide-react';
+import {CheckCircle, RefreshCw, Search, Sparkles} from 'lucide-react';
 import {useVault} from '../hooks/useVault';
 import {usePWA} from '../hooks/usePWA';
 import {useWebRTCSync} from '../hooks/useWebRTCSync';
@@ -23,6 +11,11 @@ import ApiKeyForm from '../components/vault/ApiKeyForm';
 import ApiKeyCard from '../components/vault/ApiKeyCard';
 import VaultSettings from '../components/vault/VaultSettings';
 import VaultSync from '../components/vault/VaultSync';
+import VaultHeader from '../components/vault/VaultHeader';
+import VaultEmptyState from '../components/vault/VaultEmptyState';
+import VaultMobileDock from '../components/vault/VaultMobileDock';
+import Alert from '../components/ui/Alert';
+import Button from '../components/ui/Button';
 
 export default function HomePage() {
     const vault = useVault();
@@ -91,11 +84,20 @@ export default function HomePage() {
         }
     };
 
+    const showDashboard = vault.vaultState === 'unlocked';
+
     return (
         <div className="min-h-dvh bg-surface-950 text-surface-100 flex flex-col font-sans antialiased relative">
-            <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden opacity-40">
-                <div className="absolute top-[-15%] left-[-10%] w-[55vw] h-[55vw] bg-accent/8 rounded-full blur-[120px]" />
-                <div className="absolute bottom-[-20%] right-[-10%] w-[45vw] h-[45vw] bg-surface-600/20 rounded-full blur-[100px]" />
+            <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden" aria-hidden>
+                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_color-mix(in_srgb,var(--color-accent)_8%,transparent),_transparent_55%)]" />
+                <div
+                    className="absolute inset-0 opacity-[0.035]"
+                    style={{
+                        backgroundImage:
+                            'linear-gradient(rgba(245,196,0,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(245,196,0,0.5) 1px, transparent 1px)',
+                        backgroundSize: '48px 48px'
+                    }}
+                />
             </div>
 
             <div className="relative z-10 flex-1 flex flex-col">
@@ -108,7 +110,7 @@ export default function HomePage() {
                             exit={{opacity: 0}}
                             className="flex-1 flex flex-col items-center justify-center gap-4"
                         >
-                            <RefreshCw className="w-8 h-8 text-accent animate-spin" />
+                            <RefreshCw className="w-7 h-7 text-accent animate-spin" aria-hidden />
                             <span className="text-xs text-surface-400 font-mono tracking-wider">Loading vault…</span>
                         </motion.div>
                     )}
@@ -119,154 +121,94 @@ export default function HomePage() {
                         </motion.div>
                     )}
 
-                    {vault.vaultState === 'unlocked' && (
+                    {showDashboard && (
                         <motion.div
                             key="dashboard"
                             initial={{opacity: 0}}
                             animate={{opacity: 1}}
                             exit={{opacity: 0}}
-                            className="flex-1 flex flex-col"
+                            className="flex-1 flex flex-col pb-24 sm:pb-0"
                         >
-                            <header className="sticky top-0 z-20 border-b border-surface-800/80 bg-surface-950/85 backdrop-blur-md">
-                                <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
-                                    <div className="min-w-0">
-                                        <p className="text-xl font-semibold tracking-tight text-accent leading-none">
-                                            kbox
-                                        </p>
-                                        <p className="text-[10px] text-surface-400 mt-1 truncate">
-                                            {vault.isViewOnly
-                                                ? 'Locked — secrets hidden; labels stay visible'
-                                                : 'Vault unlocked'}
-                                        </p>
-                                    </div>
-                                    <div className="flex items-center gap-1.5 shrink-0">
-                                        {vault.masterKey ? (
-                                            <button
-                                                type="button"
-                                                onClick={() => void vault.lock()}
-                                                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-surface-300 hover:text-surface-100 hover:bg-surface-800 rounded-lg border border-surface-700 cursor-pointer transition"
-                                            >
-                                                <Lock className="w-3.5 h-3.5" />
-                                                <span className="hidden sm:inline">Lock</span>
-                                            </button>
-                                        ) : (
-                                            <button
-                                                type="button"
-                                                onClick={() => vault.setShowUnlockModal(true)}
-                                                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-accent hover:bg-accent-muted rounded-lg border border-accent/30 cursor-pointer transition"
-                                            >
-                                                <Unlock className="w-3.5 h-3.5" />
-                                                <span className="hidden sm:inline">Unlock</span>
-                                            </button>
-                                        )}
-                                        <button
-                                            type="button"
-                                            onClick={() => setIsSyncOpen(true)}
-                                            className={`p-2 rounded-lg border cursor-pointer transition ${
-                                                sync.isActive
-                                                    ? 'text-accent border-accent/40 bg-accent-muted'
-                                                    : 'text-surface-300 hover:text-surface-100 hover:bg-surface-800 border-surface-700'
-                                            }`}
-                                            aria-label="Device sync"
-                                            title="Device sync"
-                                        >
-                                            <Radio className="w-4 h-4" />
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => setIsSettingsOpen(true)}
-                                            className="p-2 text-surface-300 hover:text-surface-100 hover:bg-surface-800 rounded-lg border border-surface-700 cursor-pointer transition"
-                                            aria-label="Settings"
-                                        >
-                                            <Settings className="w-4 h-4" />
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={openAddForm}
-                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-accent hover:bg-accent-dim text-surface-950 rounded-lg cursor-pointer transition"
-                                        >
-                                            <Plus className="w-3.5 h-3.5" />
-                                            <span>Add</span>
-                                        </button>
-                                    </div>
-                                </div>
-                            </header>
+                            <VaultHeader
+                                isUnlocked={!!vault.masterKey}
+                                isViewOnly={vault.isViewOnly}
+                                syncActive={sync.isActive}
+                                onLock={() => void vault.lock()}
+                                onUnlock={() => vault.setShowUnlockModal(true)}
+                                onOpenSync={() => setIsSyncOpen(true)}
+                                onOpenSettings={() => setIsSettingsOpen(true)}
+                                onAdd={openAddForm}
+                            />
 
-                            <main className="flex-1 max-w-5xl w-full mx-auto px-4 py-6 space-y-5">
+                            <main className="flex-1 max-w-5xl w-full mx-auto px-4 py-5 sm:py-6 space-y-4 sm:space-y-5">
                                 {vault.error && (
-                                    <div className="flex items-start gap-2 p-3 rounded-lg border border-danger/30 bg-danger-muted text-danger text-xs">
-                                        <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
-                                        <div className="flex-1">
-                                            <p>{vault.error}</p>
+                                    <Alert
+                                        tone="error"
+                                        action={
                                             <button
                                                 type="button"
                                                 onClick={vault.clearError}
-                                                className="mt-1 underline cursor-pointer"
+                                                className="underline cursor-pointer pressable"
                                             >
                                                 Dismiss
                                             </button>
-                                        </div>
-                                    </div>
+                                        }
+                                    >
+                                        {vault.error}
+                                    </Alert>
                                 )}
 
-                                <div className="flex flex-col sm:flex-row gap-3">
-                                    <div className="relative flex-1">
-                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-400" />
-                                        <input
-                                            type="search"
-                                            value={searchQuery}
-                                            onChange={e => setSearchQuery(e.target.value)}
-                                            placeholder="Search labels, tags, descriptions…"
-                                            className="w-full pl-9 pr-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-sm text-surface-100 placeholder:text-surface-500 focus:outline-none focus:border-accent transition"
-                                        />
-                                    </div>
+                                <div className="relative">
+                                    <Search
+                                        className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-400 pointer-events-none"
+                                        aria-hidden
+                                    />
+                                    <input
+                                        type="search"
+                                        value={searchQuery}
+                                        onChange={e => setSearchQuery(e.target.value)}
+                                        placeholder="Search labels, tags, descriptions…"
+                                        aria-label="Search vault"
+                                        className="w-full min-h-11 pl-9 pr-3 py-2.5 bg-surface-900 border border-surface-700 rounded-lg text-sm text-surface-100 placeholder:text-surface-500 focus:outline-none focus:border-accent transition"
+                                    />
                                 </div>
 
                                 {uniqueTags.length > 1 && (
-                                    <div className="flex flex-wrap gap-2">
-                                        {uniqueTags.map(tag => (
-                                            <button
-                                                key={tag}
-                                                type="button"
-                                                onClick={() => setSelectedTag(tag)}
-                                                className={`px-2.5 py-1 text-[11px] rounded-md border cursor-pointer transition ${
-                                                    selectedTag === tag
-                                                        ? 'bg-accent-muted border-accent/40 text-accent'
-                                                        : 'border-surface-700 text-surface-400 hover:border-surface-600'
-                                                }`}
-                                            >
-                                                {tag}
-                                            </button>
-                                        ))}
+                                    <div
+                                        className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-thin"
+                                        role="tablist"
+                                        aria-label="Filter by tag"
+                                    >
+                                        {uniqueTags.map(tag => {
+                                            const selected = selectedTag === tag;
+                                            return (
+                                                <button
+                                                    key={tag}
+                                                    type="button"
+                                                    role="tab"
+                                                    aria-selected={selected}
+                                                    onClick={() => setSelectedTag(tag)}
+                                                    className={`shrink-0 min-h-9 px-3 py-1.5 text-xs rounded-md border cursor-pointer pressable transition ${
+                                                        selected
+                                                            ? 'bg-accent text-on-accent border-accent font-medium'
+                                                            : 'border-surface-700 text-surface-400 hover:border-surface-600 hover:text-surface-200'
+                                                    }`}
+                                                >
+                                                    {tag}
+                                                </button>
+                                            );
+                                        })}
                                     </div>
                                 )}
 
                                 {vault.items.length === 0 ? (
-                                    <motion.div
-                                        initial={{opacity: 0, y: 8}}
-                                        animate={{opacity: 1, y: 0}}
-                                        className="flex flex-col items-center justify-center py-20 text-center gap-3"
-                                    >
-                                        <FolderOpen className="w-10 h-10 text-surface-600" />
-                                        <h2 className="text-base font-medium text-surface-100">No API keys yet</h2>
-                                        <p className="text-sm text-surface-400 max-w-sm">
-                                            Add your first API key to store it encrypted on this device.
-                                        </p>
-                                        <button
-                                            type="button"
-                                            onClick={openAddForm}
-                                            className="mt-2 inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-accent hover:bg-accent-dim text-surface-950 rounded-lg cursor-pointer transition"
-                                        >
-                                            <Plus className="w-4 h-4" />
-                                            Add your first API key
-                                        </button>
-                                    </motion.div>
+                                    <VaultEmptyState onAdd={openAddForm} />
                                 ) : filteredItems.length === 0 ? (
-                                    <div className="py-16 text-center text-sm text-surface-400">
+                                    <div className="py-14 text-center text-sm text-surface-400">
                                         No keys match your search or filter.
                                     </div>
                                 ) : (
-                                    <div className="grid gap-4 sm:grid-cols-2">
+                                    <div className="grid gap-3 sm:gap-4 sm:grid-cols-2">
                                         <AnimatePresence mode="popLayout">
                                             {filteredItems.map(item => (
                                                 <ApiKeyCard
@@ -285,6 +227,13 @@ export default function HomePage() {
                                     </div>
                                 )}
                             </main>
+
+                            <VaultMobileDock
+                                syncActive={sync.isActive}
+                                onOpenSync={() => setIsSyncOpen(true)}
+                                onOpenSettings={() => setIsSettingsOpen(true)}
+                                onAdd={openAddForm}
+                            />
                         </motion.div>
                     )}
                 </AnimatePresence>
@@ -334,42 +283,31 @@ export default function HomePage() {
             <AnimatePresence>
                 {pwa.updateAvailable && (
                     <motion.div
-                        initial={{opacity: 0, y: 50, scale: 0.9}}
+                        initial={{opacity: 0, y: 24, scale: 0.96}}
                         animate={{opacity: 1, y: 0, scale: 1}}
-                        exit={{opacity: 0, y: 30, scale: 0.95}}
-                        className="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-4 sm:w-96 bg-surface-900 border border-accent/30 p-4 rounded-xl shadow-2xl z-50 flex flex-col gap-3"
+                        exit={{opacity: 0, y: 16, scale: 0.97}}
+                        transition={{duration: 0.25, ease: [0.23, 1, 0.32, 1]}}
+                        className="fixed bottom-[5.5rem] sm:bottom-4 left-4 right-4 sm:left-auto sm:right-4 sm:w-96 bg-surface-900 border border-accent/35 p-4 rounded-xl z-50 flex flex-col gap-3 shadow-[0_12px_40px_rgba(0,0,0,0.5)]"
                     >
                         <div className="flex items-start gap-3">
-                            <div className="p-2 bg-accent/10 border border-accent/20 text-accent rounded-lg shrink-0">
-                                <Sparkles className="w-4 h-4 text-accent animate-pulse" />
+                            <div className="p-2 bg-accent-muted border border-accent/25 text-accent rounded-lg shrink-0">
+                                <Sparkles className="w-4 h-4" aria-hidden />
                             </div>
                             <div className="space-y-1 text-left">
-                                <h4 className="text-xs font-bold text-surface-100 flex items-center gap-1.5">
-                                    <span>New version ready!</span>
-                                    <span className="w-1.5 h-1.5 rounded-full bg-accent animate-ping" />
-                                </h4>
-                                <p className="text-[10px] text-surface-400 leading-normal">
-                                    A system update is available. Upgrade now to get the latest security features and
-                                    improvements. <strong>Your encrypted vault remains 100% safe.</strong>
+                                <h4 className="text-xs font-semibold text-surface-100">New version ready</h4>
+                                <p className="text-[11px] text-surface-400 leading-relaxed">
+                                    Upgrade now for the latest improvements. Your encrypted vault stays on this device.
                                 </p>
                             </div>
                         </div>
                         <div className="flex items-center gap-2 pl-11">
-                            <button
-                                type="button"
-                                onClick={pwa.upgrade}
-                                className="px-3 py-1.5 bg-accent hover:bg-accent-dim text-surface-950 text-[10px] font-bold rounded-lg transition cursor-pointer flex items-center gap-1 shadow-md shadow-accent/10"
-                            >
-                                <CheckCircle className="w-3.5 h-3.5" />
-                                <span>Upgrade Now</span>
-                            </button>
-                            <button
-                                type="button"
-                                onClick={pwa.dismissUpdate}
-                                className="px-3 py-1.5 bg-surface-950 hover:bg-surface-800 border border-surface-700 text-surface-400 text-[10px] font-semibold rounded-lg transition cursor-pointer"
-                            >
+                            <Button size="sm" onClick={pwa.upgrade}>
+                                <CheckCircle className="w-3.5 h-3.5" aria-hidden />
+                                Upgrade
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={pwa.dismissUpdate}>
                                 Not now
-                            </button>
+                            </Button>
                         </div>
                     </motion.div>
                 )}
