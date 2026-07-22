@@ -1,24 +1,42 @@
 import {useState} from 'react';
 import {AnimatePresence, motion} from 'motion/react';
-import {FolderOpen, Lock, Plus, RefreshCw, Search, Settings, ShieldAlert, Unlock} from 'lucide-react';
+import {
+    CheckCircle,
+    FolderOpen,
+    Lock,
+    Plus,
+    Radio,
+    RefreshCw,
+    Search,
+    Settings,
+    ShieldAlert,
+    Sparkles,
+    Unlock
+} from 'lucide-react';
 import {useVault} from '../hooks/useVault';
 import {usePWA} from '../hooks/usePWA';
+import {useWebRTCSync} from '../hooks/useWebRTCSync';
 import type {ApiKeyItem, PendingSensitiveAction} from '../types/vault';
-import {CheckCircle, Sparkles} from 'lucide-react';
 import VaultSetup from '../components/vault/VaultSetup';
 import VaultUnlock from '../components/vault/VaultUnlock';
 import ApiKeyForm from '../components/vault/ApiKeyForm';
 import ApiKeyCard from '../components/vault/ApiKeyCard';
 import VaultSettings from '../components/vault/VaultSettings';
+import VaultSync from '../components/vault/VaultSync';
 
 export default function HomePage() {
     const vault = useVault();
     const pwa = usePWA();
+    const sync = useWebRTCSync({
+        localItems: vault.masterKey ? vault.items : [],
+        onReplaceItems: vault.replaceAllItems
+    });
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedTag, setSelectedTag] = useState('All');
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editItem, setEditItem] = useState<ApiKeyItem | null>(null);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const [isSyncOpen, setIsSyncOpen] = useState(false);
 
     const handleResidualAction = (action: PendingSensitiveAction) => {
         if (action.type === 'add') {
@@ -156,6 +174,19 @@ export default function HomePage() {
                                                 <span className="hidden sm:inline">Unlock</span>
                                             </button>
                                         )}
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsSyncOpen(true)}
+                                            className={`p-2 rounded-lg border cursor-pointer transition ${
+                                                sync.isActive
+                                                    ? 'text-accent border-accent/40 bg-accent-muted'
+                                                    : 'text-surface-300 hover:text-surface-100 hover:bg-surface-800 border-surface-700'
+                                            }`}
+                                            aria-label="Device sync"
+                                            title="Device sync"
+                                        >
+                                            <Radio className="w-4 h-4" />
+                                        </button>
                                         <button
                                             type="button"
                                             onClick={() => setIsSettingsOpen(true)}
@@ -306,6 +337,14 @@ export default function HomePage() {
                 onCommonTagsChange={vault.setCommonTags}
                 metadata={vault.metadata}
                 onReset={vault.resetVault}
+            />
+
+            <VaultSync
+                isOpen={isSyncOpen}
+                onClose={() => setIsSyncOpen(false)}
+                sync={sync}
+                isUnlocked={!!vault.masterKey}
+                onRequestUnlock={() => vault.setShowUnlockModal(true)}
             />
 
             <AnimatePresence>

@@ -323,6 +323,16 @@ export function useVault() {
         );
     };
 
+    /** Replace the entire vault item list (used by WebRTC device sync). */
+    const replaceAllItems = async (plainItems: ApiKeyItem[]) => {
+        if (!masterKey) {
+            throw new Error('Unlock the vault before syncing.');
+        }
+        await persistItems(plainItems, masterKey);
+        setRevealedKeys({});
+        setCopiedKeyId(null);
+    };
+
     const requestReveal = (itemId: string, keyId: string) => {
         if (masterKey) {
             setRevealedKeys(prev => ({...prev, [keyId]: !prev[keyId]}));
@@ -389,6 +399,7 @@ export function useVault() {
         addItem,
         updateItem,
         deleteItem,
+        replaceAllItems,
         requestReveal,
         requestCopy,
         hideRevealedKey,
