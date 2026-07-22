@@ -32,8 +32,30 @@ describe('syncPayload', () => {
 
     it('validates payload shape', () => {
         expect(isSyncPayloadValid(toSyncPayload(sample))).to.eq(true);
-        expect(isSyncPayloadValid([{id: '1', label: 'x', keys: []}])).to.eq(true);
+        expect(
+            isSyncPayloadValid([
+                {
+                    id: '1',
+                    label: 'x',
+                    createdAt: '2026-01-01',
+                    updatedAt: '2026-01-01',
+                    keys: [{id: 'k1', label: 'API', value: 'secret'}]
+                }
+            ])
+        ).to.eq(true);
         expect(isSyncPayloadValid(null)).to.eq(false);
         expect(isSyncPayloadValid([{id: 1} as never])).to.eq(false);
+        expect(isSyncPayloadValid([{id: '1', label: 'x', keys: []} as never])).to.eq(false);
+        expect(
+            isSyncPayloadValid([
+                {
+                    id: '1',
+                    label: 'x',
+                    createdAt: '2026-01-01',
+                    updatedAt: '2026-01-01',
+                    keys: [{id: 'k1', label: 'API', value: 123 as never}]
+                }
+            ])
+        ).to.eq(false);
     });
 });

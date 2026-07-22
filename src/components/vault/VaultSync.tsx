@@ -65,8 +65,13 @@ export default function VaultSync({isOpen, onClose, sync, isUnlocked, onRequestU
         }
     };
 
+    const stopRef = useRef(sync.stop);
+    useEffect(() => {
+        stopRef.current = sync.stop;
+    }, [sync.stop]);
+
     const handleClose = () => {
-        sync.stop();
+        stopRef.current();
         setManualPeerId('');
         setScanError(null);
         onClose();
@@ -74,8 +79,14 @@ export default function VaultSync({isOpen, onClose, sync, isUnlocked, onRequestU
 
     const handleStop = () => {
         setScanError(null);
-        sync.stop();
+        stopRef.current();
     };
+
+    // Safety net: tear down WebRTC if the panel closes without handleClose.
+    useEffect(() => {
+        if (isOpen) return;
+        stopRef.current();
+    }, [isOpen]);
 
     useEffect(() => {
         if (!isOpen) return;
@@ -84,7 +95,7 @@ export default function VaultSync({isOpen, onClose, sync, isUnlocked, onRequestU
         };
         window.addEventListener('keydown', onKeyDown);
         return () => window.removeEventListener('keydown', onKeyDown);
-        // handleClose uses sync.stop (ref-backed); omit from deps to avoid rebinding every render.
+        // handleClose uses stopRef; omit from deps to avoid rebinding every render.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOpen, onClose]);
 
@@ -496,10 +507,46 @@ export default function VaultSync({isOpen, onClose, sync, isUnlocked, onRequestU
                                         </div>
                                     )}
 
-                                {sync.role === 'guest' && sync.sessionState === 'connected' && (
+                                {sync.role === 'guest' && sync.pendingIncoming && (
+                                    <div className="space-y-3 p-3 rounded-lg border border-warn/40 bg-warn/10">
+                                        <p className="text-xs text-warn leading-relaxed">
+                                            {sync.pendingIncoming.strategy === 'a-overwrites-b'
+                                                ? `The host wants to replace THIS vault with theirs (${sync.pendingIncoming.items.length} key${sync.pendingIncoming.items.length === 1 ? '' : 's'}). Your local keys will be deleted.`
+                                                : 'The host wants to pull THIS vault onto their device. Your secrets will be sent over the linked channel.'}
+                                        </p>
+                                        <div className="flex gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => void sync.acceptIncomingSync()}
+                                                className="flex-1 py-2 bg-accent hover:bg-accent-dim text-surface-950 text-xs font-medium rounded-lg cursor-pointer transition"
+                                            >
+                                                {sync.pendingIncoming.strategy === 'a-overwrites-b'
+                                                    ? 'Accept overwrite'
+                                                    : 'Send my vault'}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => sync.rejectIncomingSync()}
+                                                className="flex-1 py-2 border border-surface-700 text-surface-300 text-xs rounded-lg cursor-pointer hover:bg-surface-800 transition"
+                                            >
+                                                Reject
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {sync.role === 'guest' &&
+                                    sync.sessionState === 'connected' &&
+                                    !sync.pendingIncoming && (
+                                        <p className="text-[11px] text-surface-400 leading-relaxed">
+                                            Connected. Wait for the host to choose a merge strategy. You will be asked
+                                            to confirm before any keys are sent or replaced.
+                                        </p>
+                                    )}
+
+                                {sync.role === 'guest' && sync.sessionState === 'syncing' && !sync.pendingIncoming && (
                                     <p className="text-[11px] text-surface-400 leading-relaxed">
-                                        Connected. Wait for the host to choose a merge strategy, or stay on this screen
-                                        until sync finishes.
+                                        Waiting for the host to finish applying the transfer…
                                     </p>
                                 )}
 

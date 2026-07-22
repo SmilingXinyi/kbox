@@ -12,7 +12,7 @@ import path from 'node:path';
 
 const BASE_URL = process.env.KBOX_URL ?? 'http://127.0.0.1:4173';
 const ARTIFACT_DIR = '/opt/cursor/artifacts/dual-browser-sync';
-const PIN = '1234';
+const PIN = '123456';
 
 /** Centralized waits — override via env for slower CI without editing the script. */
 const TIMEOUT = {
@@ -100,12 +100,16 @@ async function waitConnected(page) {
     await page.getByText('Devices linked — ready to sync').waitFor({timeout: TIMEOUT.connected});
 }
 
-async function runStrategy(page, buttonName) {
-    page.once('dialog', async dialog => {
+async function runStrategy(hostPage, guestPage, buttonName, guestAcceptLabel) {
+    hostPage.once('dialog', async dialog => {
         await dialog.accept();
     });
-    await page.getByRole('button', {name: buttonName}).click();
-    await page.getByText('Sync complete').waitFor({timeout: TIMEOUT.synced});
+    await hostPage.getByRole('button', {name: buttonName}).click();
+    // Guest must explicitly confirm before secrets are applied or sent.
+    await guestPage.getByRole('button', {name: guestAcceptLabel}).waitFor({timeout: TIMEOUT.connected});
+    await guestPage.getByRole('button', {name: guestAcceptLabel}).click();
+    await hostPage.getByText('Sync complete').waitFor({timeout: TIMEOUT.synced});
+    await guestPage.getByText('Sync complete').waitFor({timeout: TIMEOUT.synced});
 }
 
 async function closeSync(page) {
@@ -180,8 +184,7 @@ async function main() {
         console.log('Connected on both sides');
 
         console.log('--- Strategy: A overwrites B ---');
-        await runStrategy(hostPage, 'A overwrites B');
-        await guestPage.getByText('Sync complete').waitFor({timeout: TIMEOUT.synced});
+        await runStrategy(hostPage, guestPage, 'A overwrites B', 'Accept overwrite');
         await shot(hostPage, '08-host-synced-a-over-b');
         await shot(guestPage, '09-guest-synced-a-over-b');
 
@@ -209,8 +212,7 @@ async function main() {
         await waitConnected(guestPage);
 
         console.log('--- Strategy: Read B, overwrite A ---');
-        await runStrategy(hostPage, 'Read B, overwrite A');
-        await guestPage.getByText('Sync complete').waitFor({timeout: TIMEOUT.synced});
+        await runStrategy(hostPage, guestPage, 'Read B, overwrite A', 'Send my vault');
         await shot(hostPage, '10-host-synced-b-over-a');
         await shot(guestPage, '11-guest-synced-b-over-a');
 

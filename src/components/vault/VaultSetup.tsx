@@ -1,12 +1,15 @@
 import {useState} from 'react';
 import {motion} from 'motion/react';
 import {AlertCircle, ChevronRight, Fingerprint, Key, Lock, RefreshCw, ShieldCheck} from 'lucide-react';
-import type {VaultMetadata} from '../../types/vault';
+import type {VaultMetadata, WebAuthnKeySource} from '../../types/vault';
 import {
     deriveKeyFromPin,
-    deriveKeyFromWebAuthnSignatureHex,
+    deriveKeyFromWebAuthnPrf,
     encryptMasterKey,
-    generateRandomHex
+    generateRandomHex,
+    hexToArrayBuffer,
+    PIN_MAX_LENGTH,
+    validatePinStrength
 } from '../../lib/crypto';
 import {isRunningInIframe, isWebAuthnSupported, registerWebAuthnCredential} from '../../lib/webauthn';
 
@@ -32,8 +35,9 @@ export default function VaultSetup({onInitialized}: VaultSetupProps) {
             setError('Please provide an owner identifier.');
             return false;
         }
-        if (pin.length < 4 || pin.length > 12) {
-            setError('Security PIN must be 4–12 characters.');
+        const pinError = validatePinStrength(pin);
+        if (pinError) {
+            setError(pinError);
             return false;
         }
         if (pin !== confirmPin) {
@@ -65,26 +69,31 @@ export default function VaultSetup({onInitialized}: VaultSetupProps) {
             };
 
             if (enableBiometrics) {
-                let signatureHex = '';
-                let credentialId = '';
-
                 if (nativeBiometricsSupported) {
                     const res = await registerWebAuthnCredential(username.trim());
-                    signatureHex = res.signatureHex;
-                    credentialId = res.credentialId;
+                    if (res.prfOutput && res.credentialId && res.prfSaltHex) {
+                        await completeWithBiometrics(
+                            masterKeyHex,
+                            metadata,
+                            res.prfOutput,
+                            res.credentialId,
+                            'prf',
+                            res.prfSaltHex
+                        );
+                        return;
+                    }
+                    // PRF unavailable — fall through to sandbox simulator for local demos.
+                    if (res.errorMessage) {
+                        setError(`${res.errorMessage} Falling back to biometric sandbox.`);
+                    }
                 }
 
-                if (!signatureHex || !credentialId) {
-                    // Fallback to simulator
-                    setShowSimulator(true);
-                    setLoading(false);
-                    return;
-                }
-
-                await completeWithBiometrics(masterKeyHex, metadata, signatureHex, credentialId);
-            } else {
-                await onInitialized(masterKeyHex, metadata);
+                setShowSimulator(true);
+                setLoading(false);
+                return;
             }
+
+            await onInitialized(masterKeyHex, metadata);
         } catch (err: unknown) {
             console.error(err);
             setError(err instanceof Error ? err.message : 'Failed to initialize the vault.');
@@ -95,17 +104,21 @@ export default function VaultSetup({onInitialized}: VaultSetupProps) {
     const completeWithBiometrics = async (
         masterKeyHex: string,
         baseMetadata: VaultMetadata,
-        signatureHex: string,
-        credentialId: string
+        prfOutput: BufferSource,
+        credentialId: string,
+        keySource: WebAuthnKeySource,
+        prfSaltHex?: string
     ) => {
         try {
-            const webauthnKek = await deriveKeyFromWebAuthnSignatureHex(signatureHex);
+            const webauthnKek = await deriveKeyFromWebAuthnPrf(prfOutput);
             const encryptedMasterWithWebAuthn = await encryptMasterKey(masterKeyHex, webauthnKek);
 
             const finalMetadata: VaultMetadata = {
                 ...baseMetadata,
                 hasWebAuthn: true,
                 webauthnCredentialId: credentialId,
+                webauthnKeySource: keySource,
+                webauthnPrfSalt: prfSaltHex,
                 webauthnIv: encryptedMasterWithWebAuthn.iv,
                 encryptedMasterKeyWithWebAuthn: encryptedMasterWithWebAuthn.ciphertext
             };
@@ -117,10 +130,10 @@ export default function VaultSetup({onInitialized}: VaultSetupProps) {
         }
     };
 
-    const handleSimulatorSuccess = async (simulatedSignature: string) => {
+    const handleSimulatorSuccess = async (simulatedKeyMaterialHex: string) => {
         setShowSimulator(false);
         setLoading(true);
-        // During setup, we generate a random master key first
+        // Simulator path regenerates vault material after the native attempt was abandoned.
         const masterKeyHex = generateRandomHex(32);
         const saltHex = generateRandomHex(16);
         const pinKek = await deriveKeyFromPin(pin, saltHex);
@@ -134,7 +147,13 @@ export default function VaultSetup({onInitialized}: VaultSetupProps) {
             encryptedMasterKeyWithPin: encryptedMasterWithPin.ciphertext
         };
 
-        await completeWithBiometrics(masterKeyHex, baseMetadata, simulatedSignature, 'simulated-credential-id');
+        await completeWithBiometrics(
+            masterKeyHex,
+            baseMetadata,
+            hexToArrayBuffer(simulatedKeyMaterialHex),
+            'simulated-credential-id',
+            'simulated'
+        );
     };
 
     return (
@@ -188,10 +207,10 @@ export default function VaultSetup({onInitialized}: VaultSetupProps) {
                             </label>
                             <input
                                 type="password"
-                                maxLength={12}
+                                maxLength={PIN_MAX_LENGTH}
                                 value={pin}
                                 onChange={e => setPin(e.target.value)}
-                                placeholder="••••"
+                                placeholder="••••••"
                                 className="w-full px-3 py-2 bg-surface-950 border border-surface-700 rounded-lg text-sm text-surface-100 placeholder:text-surface-600 focus:outline-none focus:border-accent font-mono text-center tracking-widest transition"
                                 required
                             />
@@ -200,10 +219,10 @@ export default function VaultSetup({onInitialized}: VaultSetupProps) {
                             <label className="text-xs font-medium text-surface-300">Confirm PIN</label>
                             <input
                                 type="password"
-                                maxLength={12}
+                                maxLength={PIN_MAX_LENGTH}
                                 value={confirmPin}
                                 onChange={e => setConfirmPin(e.target.value)}
-                                placeholder="••••"
+                                placeholder="••••••"
                                 className="w-full px-3 py-2 bg-surface-950 border border-surface-700 rounded-lg text-sm text-surface-100 placeholder:text-surface-600 focus:outline-none focus:border-accent font-mono text-center tracking-widest transition"
                                 required
                             />
@@ -217,7 +236,7 @@ export default function VaultSetup({onInitialized}: VaultSetupProps) {
                                 <h2 className="text-xs font-semibold text-surface-100">Face ID / Touch ID</h2>
                                 <p className="text-[10px] text-surface-400 leading-normal mt-0.5">
                                     {nativeBiometricsSupported
-                                        ? 'Wrap the master key with a platform authenticator (WebAuthn).'
+                                        ? 'Wrap the master key with WebAuthn PRF (Face ID / Touch ID / passkey).'
                                         : 'Native biometrics unavailable — using sandbox simulator.'}
                                 </p>
                             </div>
@@ -235,7 +254,10 @@ export default function VaultSetup({onInitialized}: VaultSetupProps) {
 
                     <div className="p-3 rounded-lg border border-surface-700/60 text-[10px] text-surface-400 leading-normal flex items-start gap-1.5">
                         <Lock className="w-3.5 h-3.5 text-surface-400 shrink-0 mt-0.5" />
-                        <span>Keys are encrypted locally. Nothing is uploaded to a server.</span>
+                        <span>
+                            Secret values are encrypted locally with your PIN (and optional biometrics). Labels and tags
+                            remain readable while locked so you can browse the vault.
+                        </span>
                     </div>
 
                     <button

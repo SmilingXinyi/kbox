@@ -27,6 +27,8 @@ export function createMockSync(overrides: MockSyncOverrides = {}): UseWebRTCSync
         startGuestScan: cy.stub().as('startGuestScan'),
         connectWithQrText: cy.stub().as('connectWithQrText').resolves(),
         runStrategy: cy.stub().as('runStrategy').resolves(),
+        acceptIncomingSync: cy.stub().as('acceptIncomingSync').resolves(),
+        rejectIncomingSync: cy.stub().as('rejectIncomingSync'),
         stop: cy.stub().as('stop'),
         ...overrides
     };

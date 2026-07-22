@@ -1,4 +1,4 @@
-import {arrayBufferToHex, stringToBuffer} from './crypto';
+import {arrayBufferToHex, generateRandomHex, hexToArrayBuffer} from './crypto';
 
 export function isWebAuthnSupported(): boolean {
     return (
@@ -17,39 +17,53 @@ export function isRunningInIframe(): boolean {
 
 export type WebAuthnRegistrationResult = {
     credentialId: string;
-    signatureHex: string;
-    isSimulated?: boolean;
+    /** Raw PRF first output (32 bytes when supported). */
+    prfOutput: ArrayBuffer | null;
+    /** Per-vault salt used for PRF eval (hex). */
+    prfSaltHex: string;
     errorMessage?: string;
 };
 
 export type WebAuthnAssertionResult = {
-    signatureHex: string;
-    isSimulated?: boolean;
+    prfOutput: ArrayBuffer | null;
     errorMessage?: string;
 };
 
-/**
- * Fixed challenge for reproducible client-only key derivation.
- * Not a standard production WebAuthn flow (no server-side challenge verification).
- */
-const STATIC_CHALLENGE = new Uint8Array([
-    0x6b, 0x62, 0x6f, 0x78, 0x2d, 0x76, 0x61, 0x75, 0x6c, 0x74, 0x2d, 0x63, 0x68, 0x61, 0x6c, 0x6c, 0x65, 0x6e, 0x67,
-    0x65, 0x2d, 0x76, 0x31, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01
-]);
+type PrfExtensionClientOutputs = {
+    enabled?: boolean;
+    results?: {
+        first?: ArrayBuffer;
+        second?: ArrayBuffer;
+    };
+};
 
-function hexToUint8Array(hex: string): Uint8Array<ArrayBuffer> {
-    const bytes = new Uint8Array(hex.length / 2);
-    for (let i = 0; i < hex.length; i += 2) {
-        bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
-    }
-    return bytes as Uint8Array<ArrayBuffer>;
+function readPrfExtension(credential: PublicKeyCredential): PrfExtensionClientOutputs | undefined {
+    const outputs = credential.getClientExtensionResults() as AuthenticationExtensionsClientOutputs & {
+        prf?: PrfExtensionClientOutputs;
+    };
+    return outputs.prf;
 }
 
+function randomChallenge(): Uint8Array<ArrayBuffer> {
+    return window.crypto.getRandomValues(new Uint8Array(32)) as Uint8Array<ArrayBuffer>;
+}
+
+function hexToUint8Array(hex: string): Uint8Array<ArrayBuffer> {
+    return new Uint8Array(hexToArrayBuffer(hex)) as Uint8Array<ArrayBuffer>;
+}
+
+/**
+ * Register a platform credential with the WebAuthn PRF extension enabled, then
+ * immediately evaluate PRF so the vault can wrap the master key with a stable KEK.
+ *
+ * Assertion signatures are NOT used for key derivation (they change with signCount).
+ */
 export async function registerWebAuthnCredential(username: string): Promise<WebAuthnRegistrationResult> {
     if (!isWebAuthnSupported()) {
         return {
             credentialId: '',
-            signatureHex: '',
+            prfOutput: null,
+            prfSaltHex: '',
             errorMessage: 'WebAuthn is not supported by your browser.'
         };
     }
@@ -57,23 +71,25 @@ export async function registerWebAuthnCredential(username: string): Promise<WebA
     if (isRunningInIframe()) {
         return {
             credentialId: '',
-            signatureHex: '',
+            prfOutput: null,
+            prfSaltHex: '',
             errorMessage: 'Biometrics are unavailable inside an iframe. Use your PIN instead.'
         };
     }
 
     const rpId = window.location.hostname || 'localhost';
+    const prfSaltHex = generateRandomHex(32);
 
     try {
         const options: CredentialCreationOptions = {
             publicKey: {
-                challenge: STATIC_CHALLENGE,
+                challenge: randomChallenge(),
                 rp: {
                     name: 'kbox',
                     id: rpId
                 },
                 user: {
-                    id: stringToBuffer(username),
+                    id: new TextEncoder().encode(username) as Uint8Array<ArrayBuffer>,
                     name: username,
                     displayName: username
                 },
@@ -83,9 +99,14 @@ export async function registerWebAuthnCredential(username: string): Promise<WebA
                 ],
                 authenticatorSelection: {
                     authenticatorAttachment: 'platform',
-                    userVerification: 'required'
+                    userVerification: 'required',
+                    residentKey: 'preferred'
                 },
-                timeout: 30000
+                timeout: 60000,
+                extensions: {
+                    // Empty object enables PRF / hmac-secret on supporting authenticators.
+                    prf: {}
+                } as AuthenticationExtensionsClientInputs
             }
         };
 
@@ -96,42 +117,65 @@ export async function registerWebAuthnCredential(username: string): Promise<WebA
         }
 
         const credentialIdHex = arrayBufferToHex(credential.rawId);
-        const dryRunResult = await getWebAuthnAssertion(credentialIdHex);
+        const createPrf = readPrfExtension(credential);
 
-        if (!dryRunResult.signatureHex) {
+        // Some platforms only report `enabled` on create; secrets come from a follow-up get().
+        if (createPrf && createPrf.enabled === false) {
             return {
                 credentialId: '',
-                signatureHex: '',
-                errorMessage: dryRunResult.errorMessage ?? 'Failed to complete biometric enrollment.'
+                prfOutput: null,
+                prfSaltHex: '',
+                errorMessage:
+                    'This authenticator does not support WebAuthn PRF. Use PIN only, or try a newer browser / passkey provider.'
+            };
+        }
+
+        const dryRun = await getWebAuthnAssertion(credentialIdHex, prfSaltHex);
+        if (!dryRun.prfOutput) {
+            return {
+                credentialId: '',
+                prfOutput: null,
+                prfSaltHex: '',
+                errorMessage:
+                    dryRun.errorMessage ??
+                    'Failed to derive a biometric key (PRF unavailable). Use PIN only on this device.'
             };
         }
 
         return {
             credentialId: credentialIdHex,
-            signatureHex: dryRunResult.signatureHex
+            prfOutput: dryRun.prfOutput,
+            prfSaltHex
         };
     } catch (error: unknown) {
         console.warn('WebAuthn registration failed:', error);
         const message = error instanceof Error ? error.message : 'Unknown error occurred.';
         return {
             credentialId: '',
-            signatureHex: '',
+            prfOutput: null,
+            prfSaltHex: '',
             errorMessage: message
         };
     }
 }
 
-export async function getWebAuthnAssertion(credentialIdHex: string): Promise<WebAuthnAssertionResult> {
-    if (!isWebAuthnSupported() || !credentialIdHex) {
+/**
+ * Assert an existing credential and evaluate WebAuthn PRF with the vault's salt.
+ */
+export async function getWebAuthnAssertion(
+    credentialIdHex: string,
+    prfSaltHex: string
+): Promise<WebAuthnAssertionResult> {
+    if (!isWebAuthnSupported() || !credentialIdHex || !prfSaltHex) {
         return {
-            signatureHex: '',
+            prfOutput: null,
             errorMessage: 'WebAuthn is not supported or not initialized.'
         };
     }
 
     if (isRunningInIframe()) {
         return {
-            signatureHex: '',
+            prfOutput: null,
             errorMessage: 'Biometrics are unavailable inside an iframe. Use your PIN instead.'
         };
     }
@@ -140,10 +184,11 @@ export async function getWebAuthnAssertion(credentialIdHex: string): Promise<Web
 
     try {
         const credentialIdBuffer = hexToUint8Array(credentialIdHex);
+        const prfSalt = hexToUint8Array(prfSaltHex);
 
         const options: CredentialRequestOptions = {
             publicKey: {
-                challenge: STATIC_CHALLENGE,
+                challenge: randomChallenge(),
                 rpId,
                 allowCredentials: [
                     {
@@ -152,7 +197,14 @@ export async function getWebAuthnAssertion(credentialIdHex: string): Promise<Web
                     }
                 ],
                 userVerification: 'required',
-                timeout: 30000
+                timeout: 60000,
+                extensions: {
+                    prf: {
+                        eval: {
+                            first: prfSalt
+                        }
+                    }
+                } as AuthenticationExtensionsClientInputs
             }
         };
 
@@ -162,16 +214,20 @@ export async function getWebAuthnAssertion(credentialIdHex: string): Promise<Web
             throw new Error('Assertion returned null');
         }
 
-        const response = assertion.response as AuthenticatorAssertionResponse;
+        const prfFirst = readPrfExtension(assertion)?.results?.first;
+        if (!prfFirst || prfFirst.byteLength < 32) {
+            return {
+                prfOutput: null,
+                errorMessage: 'Authenticator did not return a PRF secret. Biometric unlock needs a PRF-capable passkey.'
+            };
+        }
 
-        return {
-            signatureHex: arrayBufferToHex(response.signature)
-        };
+        return {prfOutput: prfFirst};
     } catch (error: unknown) {
         console.warn('WebAuthn assertion failed:', error);
         const message = error instanceof Error ? error.message : 'Unknown error occurred.';
         return {
-            signatureHex: '',
+            prfOutput: null,
             errorMessage: message
         };
     }

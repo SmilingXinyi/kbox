@@ -1,69 +1,95 @@
-const CACHE_NAME = 'kbox-v1';
-const STABLE_ASSETS = ['/', '/manifest.json', '/icon.svg'];
+// Bump this when caching strategy or shell assets change so old caches are dropped.
+const CACHE_NAME = 'kbox-v3';
+const STABLE_ASSETS = ['/manifest.json', '/icon.svg'];
 
-// Install event - Cache core stable assets
 self.addEventListener('install', event => {
     event.waitUntil(
         caches
             .open(CACHE_NAME)
-            .then(cache => {
-                return cache.addAll(STABLE_ASSETS);
-            })
-            .then(() => {
-                return self.skipWaiting();
-            })
+            .then(cache => cache.addAll(STABLE_ASSETS))
+            .then(() => self.skipWaiting())
     );
 });
 
-// Activate event - Clean up old cache versions
 self.addEventListener('activate', event => {
     event.waitUntil(
         caches
             .keys()
-            .then(keys => {
-                return Promise.all(
-                    keys.map(key => {
-                        if (key !== CACHE_NAME) {
-                            return caches.delete(key);
-                        }
-                    })
-                );
-            })
-            .then(() => {
-                return self.clients.claim();
-            })
+            .then(keys => Promise.all(keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))))
+            .then(() => self.clients.claim())
     );
 });
 
-// Fetch event - Stale-While-Revalidate caching for seamless offline-first experience
+function isNavigationRequest(request) {
+    return request.mode === 'navigate' || (request.headers.get('accept') || '').includes('text/html');
+}
+
+function isVersionedAsset(pathname) {
+    // Vite hashed bundles under /assets/ — safe to cache once fetched.
+    return pathname.startsWith('/assets/');
+}
+
 self.addEventListener('fetch', event => {
-    // Only intercept local GET requests
     if (event.request.method !== 'GET' || !event.request.url.startsWith(self.location.origin)) {
         return;
     }
 
-    // Bypass cache for dev tools and live-server queries (like hot module replacement queries)
     const url = new URL(event.request.url);
     if (url.pathname.includes('/@vite/') || url.pathname.includes('/node_modules/')) {
         return;
     }
 
+    // App shell / HTML: network-first so security fixes ship without a stale document.
+    if (isNavigationRequest(event.request) || url.pathname === '/' || url.pathname.endsWith('.html')) {
+        event.respondWith(
+            fetch(event.request)
+                .then(networkResponse => {
+                    if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
+                        const copy = networkResponse.clone();
+                        caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy));
+                    }
+                    return networkResponse;
+                })
+                .catch(async () => {
+                    const cached = await caches.match(event.request);
+                    if (cached) return cached;
+                    return caches.match('/');
+                })
+        );
+        return;
+    }
+
+    // Hashed static assets: cache-first after first network success.
+    if (isVersionedAsset(url.pathname)) {
+        event.respondWith(
+            caches.match(event.request).then(cachedResponse => {
+                if (cachedResponse) return cachedResponse;
+                return fetch(event.request).then(networkResponse => {
+                    if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
+                        const copy = networkResponse.clone();
+                        caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy));
+                    }
+                    return networkResponse;
+                });
+            })
+        );
+        return;
+    }
+
+    // Icons / manifest: stale-while-revalidate.
     event.respondWith(
         caches.match(event.request).then(cachedResponse => {
             const fetchPromise = fetch(event.request)
                 .then(networkResponse => {
-                    // Validate response before caching
                     if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
-                        const responseToCache = networkResponse.clone();
-                        caches.open(CACHE_NAME).then(cache => {
-                            cache.put(event.request, responseToCache);
-                        });
+                        const copy = networkResponse.clone();
+                        caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy));
                     }
                     return networkResponse;
                 })
                 .catch(err => {
                     console.warn('Network fetch failed for service worker:', err);
-                    return cachedResponse; // fallback to cache on network offline
+                    return cachedResponse;
                 });
 
             return cachedResponse || fetchPromise;
@@ -71,7 +97,6 @@ self.addEventListener('fetch', event => {
     );
 });
 
-// Receive message from parent to activate the waiting service worker immediately
 self.addEventListener('message', event => {
     if (event.data && event.data.type === 'SKIP_WAITING') {
         self.skipWaiting();

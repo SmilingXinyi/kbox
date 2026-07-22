@@ -35,6 +35,10 @@ export async function serializeAndEncryptItems(plainItems: ApiKeyItem[], keyHex:
     return encryptedItems;
 }
 
+/**
+ * Decrypt all key values. Fail-closed: any ciphertext that cannot be decrypted
+ * rejects the whole unlock rather than exposing a fake plaintext placeholder.
+ */
 export async function decryptItemsInMemory(encryptedItems: ApiKeyItem[], keyHex: string): Promise<ApiKeyItem[]> {
     const decryptedItems: ApiKeyItem[] = [];
 
@@ -50,9 +54,8 @@ export async function decryptItemsInMemory(encryptedItems: ApiKeyItem[], keyHex:
                     });
                 } catch (e) {
                     console.error(`Failed to decrypt key ${keyEntry.id}:`, e);
-                    decryptedKeys.push({
-                        ...keyEntry,
-                        value: 'Decryption Error'
+                    throw new Error('Failed to decrypt vault items. The master key may be incorrect.', {
+                        cause: e
                     });
                 }
             } else {

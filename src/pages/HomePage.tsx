@@ -16,7 +16,7 @@ import {
 import {useVault} from '../hooks/useVault';
 import {usePWA} from '../hooks/usePWA';
 import {useWebRTCSync} from '../hooks/useWebRTCSync';
-import type {ApiKeyItem, PendingSensitiveAction} from '../types/vault';
+import type {ApiKeyItem, ResidualUnlockResult} from '../types/vault';
 import VaultSetup from '../components/vault/VaultSetup';
 import VaultUnlock from '../components/vault/VaultUnlock';
 import ApiKeyForm from '../components/vault/ApiKeyForm';
@@ -38,22 +38,20 @@ export default function HomePage() {
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [isSyncOpen, setIsSyncOpen] = useState(false);
 
-    const handleResidualAction = (action: PendingSensitiveAction) => {
+    const handleResidualAction = (result: ResidualUnlockResult) => {
+        const {action, items} = result;
         if (action.type === 'add') {
             setEditItem(null);
             setIsFormOpen(true);
             return;
         }
         if (action.type === 'edit' && action.itemId) {
-            const item = vault.items.find(i => i.id === action.itemId);
+            // Use the unlock-time decrypted snapshot — React state may still be stale.
+            const item = items.find(i => i.id === action.itemId);
             if (item) {
                 setEditItem(item);
                 setIsFormOpen(true);
             }
-            return;
-        }
-        if (action.type === 'delete' && action.itemId) {
-            void vault.deleteItem(action.itemId);
         }
     };
 
@@ -121,19 +119,6 @@ export default function HomePage() {
                         </motion.div>
                     )}
 
-                    {vault.vaultState === 'locked' && vault.metadata && (
-                        <motion.div key="locked" initial={{opacity: 0}} animate={{opacity: 1}} exit={{opacity: 0}}>
-                            <VaultUnlock
-                                metadata={vault.metadata}
-                                mode="fullscreen"
-                                onUnlockWithPin={vault.unlockWithPin}
-                                onUnlockWithWebAuthn={vault.unlockWithWebAuthn}
-                                onReset={vault.resetVault}
-                                onResidualAction={handleResidualAction}
-                            />
-                        </motion.div>
-                    )}
-
                     {vault.vaultState === 'unlocked' && (
                         <motion.div
                             key="dashboard"
@@ -150,7 +135,7 @@ export default function HomePage() {
                                         </p>
                                         <p className="text-[10px] text-surface-400 mt-1 truncate">
                                             {vault.isViewOnly
-                                                ? 'Vault locked — authenticate to reveal secrets'
+                                                ? 'Locked — secrets hidden; labels stay visible'
                                                 : 'Vault unlocked'}
                                         </p>
                                     </div>
@@ -308,7 +293,6 @@ export default function HomePage() {
             {vault.showUnlockModal && vault.metadata && (
                 <VaultUnlock
                     metadata={vault.metadata}
-                    mode="modal"
                     onUnlockWithPin={vault.unlockWithPin}
                     onUnlockWithWebAuthn={vault.unlockWithWebAuthn}
                     onClose={vault.cancelUnlockModal}

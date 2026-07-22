@@ -1,20 +1,24 @@
 import {useEffect, useState} from 'react';
-import type {ApiKeyItem, LockBehavior, PendingSensitiveAction, VaultMetadata, VaultState} from '../types/vault';
-import {decryptMasterKey, deriveKeyFromPin, deriveKeyFromWebAuthnSignatureHex} from '../lib/crypto';
+import type {
+    ApiKeyItem,
+    LockBehavior,
+    PendingSensitiveAction,
+    ResidualUnlockResult,
+    VaultMetadata,
+    VaultState
+} from '../types/vault';
+import {decryptMasterKey, deriveKeyFromPin, deriveKeyFromWebAuthnPrf, hexToArrayBuffer} from '../lib/crypto';
 import {clearVaultStorage, getEncryptedItemsFromDB, saveEncryptedItemsToDB} from '../lib/indexedDB';
 import {STORAGE_KEYS} from '../lib/vaultStorageKeys';
 import {
-    clearLegacyStorageKeys,
     loadLocalV2Items,
     loadLockBehavior,
     loadCommonTags,
-    loadV1CipherPayload,
     loadVaultMetadata,
     saveLockBehavior,
     saveCommonTags,
     saveVaultMetadata
 } from '../lib/vaultMigration';
-import {decryptDatabase} from '../lib/crypto';
 import {decryptItemsInMemory, serializeAndEncryptItems} from '../lib/vaultItems';
 import {getWebAuthnAssertion} from '../lib/webauthn';
 import {useAutoLock} from './useAutoLock';
@@ -39,7 +43,6 @@ export function useVault() {
                 const initialTags = loadCommonTags();
                 setCommonTagsState(initialTags);
 
-                // Ensure tags are persisted if not already present
                 if (!localStorage.getItem(STORAGE_KEYS.commonTags)) {
                     saveCommonTags(initialTags);
                 }
@@ -64,12 +67,6 @@ export function useVault() {
                     setItems(localV2);
                     await saveEncryptedItemsToDB(localV2);
                     setVaultState('unlocked');
-                    return;
-                }
-
-                const v1 = loadV1CipherPayload();
-                if (v1) {
-                    setVaultState('locked');
                     return;
                 }
 
@@ -106,7 +103,6 @@ export function useVault() {
 
     const completeSetup = async (masterKeyHex: string, meta: VaultMetadata) => {
         saveVaultMetadata(meta);
-        clearLegacyStorageKeys();
         setMetadata(meta);
         setMasterKey(masterKeyHex);
         await persistItems([], masterKeyHex);
@@ -140,7 +136,6 @@ export function useVault() {
 
     const resetVault = async () => {
         await clearVaultStorage();
-        clearLegacyStorageKeys();
         setMetadata(null);
         setMasterKey(null);
         setItems([]);
@@ -152,64 +147,55 @@ export function useVault() {
         setError(null);
     };
 
-    const applyMasterKey = async (
-        keyHex: string,
-        options?: {migrateV1?: boolean}
-    ): Promise<PendingSensitiveAction | null> => {
+    const applyMasterKey = async (keyHex: string): Promise<ResidualUnlockResult | null> => {
         setMasterKey(keyHex);
         setError(null);
 
         const actionToResume = pendingAction;
-        let residualAction: PendingSensitiveAction | null = null;
 
-        if (options?.migrateV1) {
-            const v1 = loadV1CipherPayload();
-            if (v1) {
-                try {
-                    const decryptedJson = await decryptDatabase(v1.ciphertext, v1.iv, keyHex);
-                    const parsed = JSON.parse(decryptedJson) as {items?: ApiKeyItem[]};
-                    const decryptedItems = parsed.items ?? [];
-                    await persistItems(decryptedItems, keyHex);
-                    setVaultState('unlocked');
-                    setShowUnlockModal(false);
-                    setPendingAction(null);
-                    return null;
-                } catch (e) {
-                    console.error('V1 migration failed:', e);
-                    setMasterKey(null);
-                    throw new Error('Decryption failed. The PIN or biometric key may be incorrect.', {
-                        cause: e
-                    });
-                }
+        try {
+            const encryptedItems = await getEncryptedItemsFromDB();
+            let plainItems: ApiKeyItem[] = [];
+
+            if (encryptedItems) {
+                plainItems = await decryptItemsInMemory(encryptedItems, keyHex);
+                setItems(plainItems);
+            } else {
+                setItems([]);
             }
-        }
-
-        const encryptedItems = await getEncryptedItemsFromDB();
-        if (encryptedItems) {
-            const plainItems = await decryptItemsInMemory(encryptedItems, keyHex);
-            setItems(plainItems);
 
             if (actionToResume) {
                 if (actionToResume.type === 'reveal' || actionToResume.type === 'copy') {
-                    await resumePendingAction(plainItems, keyHex, actionToResume);
-                } else {
-                    residualAction = actionToResume;
+                    await resumePendingAction(plainItems, actionToResume);
+                } else if (actionToResume.type === 'delete' && actionToResume.itemId) {
+                    await persistItems(
+                        plainItems.filter(i => i.id !== actionToResume.itemId),
+                        keyHex
+                    );
+                } else if (actionToResume.type === 'add' || actionToResume.type === 'edit') {
+                    setVaultState('unlocked');
+                    setShowUnlockModal(false);
+                    setPendingAction(null);
+                    return {action: actionToResume, items: plainItems};
                 }
             }
-        } else {
-            setItems([]);
-            if (actionToResume && actionToResume.type !== 'reveal' && actionToResume.type !== 'copy') {
-                residualAction = actionToResume;
-            }
-        }
 
-        setVaultState('unlocked');
-        setShowUnlockModal(false);
-        setPendingAction(null);
-        return residualAction;
+            setVaultState('unlocked');
+            setShowUnlockModal(false);
+            setPendingAction(null);
+            return null;
+        } catch (e) {
+            setMasterKey(null);
+            setRevealedKeys({});
+            console.error('Failed to apply master key:', e);
+            if (e instanceof Error && e.message.startsWith('Failed to decrypt vault items')) {
+                throw e;
+            }
+            throw new Error('Failed to decrypt vault items. The master key may be incorrect.', {cause: e});
+        }
     };
 
-    const resumePendingAction = async (plainItems: ApiKeyItem[], _keyHex: string, action: PendingSensitiveAction) => {
+    const resumePendingAction = async (plainItems: ApiKeyItem[], action: PendingSensitiveAction) => {
         if (action.type === 'reveal' && action.keyId) {
             setRevealedKeys(prev => ({...prev, [action.keyId!]: true}));
             return;
@@ -231,7 +217,7 @@ export function useVault() {
         }
     };
 
-    const unlockWithPin = async (pin: string): Promise<PendingSensitiveAction | null> => {
+    const unlockWithPin = async (pin: string): Promise<ResidualUnlockResult | null> => {
         if (!metadata) {
             throw new Error('Vault is not initialized.');
         }
@@ -239,41 +225,53 @@ export function useVault() {
         try {
             const pinKek = await deriveKeyFromPin(pin, metadata.salt);
             const keyHex = await decryptMasterKey(metadata.encryptedMasterKeyWithPin, metadata.pinIv, pinKek);
-            return await applyMasterKey(keyHex, {migrateV1: vaultState === 'locked'});
+            return await applyMasterKey(keyHex);
         } catch (e) {
             console.error('PIN unlock failed:', e);
-            if (e instanceof Error && e.message.startsWith('Decryption failed')) {
+            if (e instanceof Error && e.message.startsWith('Failed to decrypt vault items')) {
                 throw e;
             }
             throw new Error('Incorrect PIN.', {cause: e});
         }
     };
 
-    const unlockWithWebAuthn = async (simulatedSignature?: string): Promise<PendingSensitiveAction | null> => {
+    const unlockWithWebAuthn = async (simulatedKeyMaterialHex?: string): Promise<ResidualUnlockResult | null> => {
         if (!metadata?.hasWebAuthn || !metadata.webauthnCredentialId) {
             throw new Error('Biometrics are not enabled for this vault.');
         }
 
-        if (!metadata.encryptedMasterKeyWithWebAuthn || !metadata.webauthnIv) {
+        if (!metadata.encryptedMasterKeyWithWebAuthn || !metadata.webauthnIv || !metadata.webauthnKeySource) {
             throw new Error('Biometric key material is missing.');
         }
 
-        let signatureHex = simulatedSignature;
+        const keySource = metadata.webauthnKeySource;
+        let prfOutput: BufferSource;
 
-        if (!signatureHex) {
-            const assertion = await getWebAuthnAssertion(metadata.webauthnCredentialId);
-            if (!assertion.signatureHex) {
+        if (simulatedKeyMaterialHex) {
+            prfOutput = hexToArrayBuffer(simulatedKeyMaterialHex);
+        } else if (keySource === 'simulated') {
+            throw new Error('Biometric sandbox required.');
+        } else {
+            if (!metadata.webauthnPrfSalt) {
+                throw new Error('Biometric PRF salt is missing. Use your PIN instead.');
+            }
+
+            const assertion = await getWebAuthnAssertion(metadata.webauthnCredentialId, metadata.webauthnPrfSalt);
+            if (!assertion.prfOutput) {
                 throw new Error(assertion.errorMessage ?? 'Biometric authentication failed.');
             }
-            signatureHex = assertion.signatureHex;
+            prfOutput = assertion.prfOutput;
         }
 
         try {
-            const kek = await deriveKeyFromWebAuthnSignatureHex(signatureHex);
+            const kek = await deriveKeyFromWebAuthnPrf(prfOutput);
             const keyHex = await decryptMasterKey(metadata.encryptedMasterKeyWithWebAuthn, metadata.webauthnIv, kek);
-            return await applyMasterKey(keyHex, {migrateV1: vaultState === 'locked'});
+            return await applyMasterKey(keyHex);
         } catch (e) {
             console.error('WebAuthn unlock failed:', e);
+            if (e instanceof Error && e.message === 'Biometric sandbox required.') {
+                throw e;
+            }
             if (e instanceof Error && !e.message.includes('Biometric')) {
                 throw new Error('Biometric unlock failed. Try your PIN instead.', {cause: e});
             }

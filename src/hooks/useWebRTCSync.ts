@@ -11,6 +11,10 @@ type UseWebRTCSyncOptions = {
     onReplaceItems: (items: ApiKeyItem[]) => Promise<void>;
 };
 
+export type PendingIncomingSync =
+    | {strategy: 'a-overwrites-b'; items: ApiKeyItem[]}
+    | {strategy: 'b-overwrites-a'; items?: undefined};
+
 export function useWebRTCSync({localItems, onReplaceItems}: UseWebRTCSyncOptions) {
     const [sessionState, setSessionState] = useState<SyncSessionState>('idle');
     const [role, setRole] = useState<SyncRole | null>(null);
@@ -19,10 +23,7 @@ export function useWebRTCSync({localItems, onReplaceItems}: UseWebRTCSyncOptions
     const [remote, setRemote] = useState<SyncPeerSummary | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [lastSyncedCount, setLastSyncedCount] = useState<number | null>(null);
-    const [pendingIncoming, setPendingIncoming] = useState<{
-        strategy: SyncStrategy;
-        items?: ApiKeyItem[];
-    } | null>(null);
+    const [pendingIncoming, setPendingIncoming] = useState<PendingIncomingSync | null>(null);
 
     const sessionRef = useRef<WebRtcSyncSession | null>(null);
     const pendingStrategyRef = useRef<SyncStrategy | null>(null);
@@ -63,44 +64,24 @@ export function useWebRTCSync({localItems, onReplaceItems}: UseWebRTCSyncOptions
         };
     }, []);
 
-    const handleIncomingSyncRequest = async (strategy: SyncStrategy, items: ApiKeyItem[] | undefined) => {
+    const handleIncomingSyncRequest = (strategy: SyncStrategy, items: ApiKeyItem[] | undefined) => {
         const session = sessionRef.current;
         if (!session) return;
 
-        // Host A overwrites guest B: guest receives items and applies.
+        // Never auto-apply or auto-send — guest must confirm in the UI.
         if (strategy === 'a-overwrites-b') {
             if (!items || !isSyncPayloadValid(items)) {
                 session.sendSyncReject('Missing vault payload from host.');
                 return;
             }
-            setSessionState('syncing');
-            try {
-                await onReplaceItemsRef.current(items);
-                session.sendSyncComplete(items.length);
-                setLastSyncedCount(items.length);
-                setSessionState('synced');
-            } catch (e) {
-                console.error('Failed to apply host vault:', e);
-                const message = e instanceof Error ? e.message : 'Failed to apply synced vault.';
-                session.sendSyncReject(message);
-                setError(message);
-                setSessionState('connected');
-            }
+            setPendingIncoming({strategy: 'a-overwrites-b', items});
+            setSessionState('connected');
             return;
         }
 
-        // Host requests guest vault (B overwrites A): guest sends local plaintext items.
         if (strategy === 'b-overwrites-a') {
-            setSessionState('syncing');
-            try {
-                session.sendSyncData(toSyncPayload(localItemsRef.current));
-            } catch (e) {
-                console.error('Failed to send guest vault:', e);
-                const message = e instanceof Error ? e.message : 'Failed to send vault data.';
-                session.sendSyncReject(message);
-                setError(message);
-                setSessionState('connected');
-            }
+            setPendingIncoming({strategy: 'b-overwrites-a'});
+            setSessionState('connected');
         }
     };
 
@@ -116,9 +97,11 @@ export function useWebRTCSync({localItems, onReplaceItems}: UseWebRTCSyncOptions
             return;
         }
 
-        // Host receives guest data for b-overwrites-a.
+        // Host receives guest data for b-overwrites-a (host already confirmed the strategy).
         if (pendingStrategyRef.current !== 'b-overwrites-a') {
-            setPendingIncoming({strategy: 'b-overwrites-a', items});
+            setError('Received unexpected vault payload.');
+            session.sendSyncReject('Unexpected vault payload.');
+            setSessionState('connected');
             return;
         }
 
@@ -139,6 +122,52 @@ export function useWebRTCSync({localItems, onReplaceItems}: UseWebRTCSyncOptions
         }
     };
 
+    const acceptIncomingSync = async () => {
+        const session = sessionRef.current;
+        const pending = pendingIncoming;
+        if (!session || !pending) return;
+
+        setError(null);
+        setSessionState('syncing');
+
+        if (pending.strategy === 'a-overwrites-b') {
+            try {
+                await onReplaceItemsRef.current(pending.items);
+                session.sendSyncComplete(pending.items.length);
+                setLastSyncedCount(pending.items.length);
+                setPendingIncoming(null);
+                setSessionState('synced');
+            } catch (e) {
+                console.error('Failed to apply host vault:', e);
+                const message = e instanceof Error ? e.message : 'Failed to apply synced vault.';
+                session.sendSyncReject(message);
+                setError(message);
+                setSessionState('connected');
+            }
+            return;
+        }
+
+        // Guest confirmed sending local vault to host (b-overwrites-a).
+        try {
+            session.sendSyncData(toSyncPayload(localItemsRef.current));
+            setPendingIncoming(null);
+            // Stay in syncing until host replies with sync-complete.
+        } catch (e) {
+            console.error('Failed to send guest vault:', e);
+            const message = e instanceof Error ? e.message : 'Failed to send vault data.';
+            session.sendSyncReject(message);
+            setError(message);
+            setSessionState('connected');
+        }
+    };
+
+    const rejectIncomingSync = (reason = 'Rejected by peer.') => {
+        const session = sessionRef.current;
+        session?.sendSyncReject(reason);
+        setPendingIncoming(null);
+        setSessionState('connected');
+    };
+
     const createSession = (nextRole: SyncRole) => {
         sessionRef.current?.destroy();
 
@@ -156,7 +185,7 @@ export function useWebRTCSync({localItems, onReplaceItems}: UseWebRTCSyncOptions
             },
             onRemoteSummary: summary => setRemote(summary),
             onIncomingSyncRequest: (strategy, items) => {
-                void handleIncomingSyncRequest(strategy, items);
+                handleIncomingSyncRequest(strategy, items);
             },
             onIncomingSyncData: items => {
                 void handleIncomingSyncData(items);
@@ -248,12 +277,12 @@ export function useWebRTCSync({localItems, onReplaceItems}: UseWebRTCSyncOptions
         pendingStrategyRef.current = strategy;
 
         if (strategy === 'a-overwrites-b') {
-            // Host pushes local vault to guest.
+            // Host pushes local vault to guest (guest must still confirm before applying).
             session.sendSyncRequest(strategy, toSyncPayload(localItemsRef.current));
             return;
         }
 
-        // Host asks guest for vault, then applies on sync-data.
+        // Host asks guest for vault; guest confirms before sending; host applies on sync-data.
         session.sendSyncRequest(strategy);
     };
 
@@ -278,6 +307,8 @@ export function useWebRTCSync({localItems, onReplaceItems}: UseWebRTCSyncOptions
         startGuestScan,
         connectWithQrText,
         runStrategy,
+        acceptIncomingSync,
+        rejectIncomingSync,
         stop
     };
 }

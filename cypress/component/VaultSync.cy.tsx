@@ -7,13 +7,7 @@ describe('<VaultSync />', () => {
         const onRequestUnlock = cy.stub().as('onRequestUnlock');
 
         cy.mount(
-            <VaultSync
-                isOpen
-                onClose={cy.stub()}
-                sync={sync}
-                isUnlocked={false}
-                onRequestUnlock={onRequestUnlock}
-            />
+            <VaultSync isOpen onClose={cy.stub()} sync={sync} isUnlocked={false} onRequestUnlock={onRequestUnlock} />
         );
 
         cy.contains('Device sync').should('be.visible');
@@ -28,9 +22,7 @@ describe('<VaultSync />', () => {
     it('starts host mode when unlocked', () => {
         const sync = createMockSync({sessionState: 'idle'});
 
-        cy.mount(
-            <VaultSync isOpen onClose={cy.stub()} sync={sync} isUnlocked onRequestUnlock={cy.stub()} />
-        );
+        cy.mount(<VaultSync isOpen onClose={cy.stub()} sync={sync} isUnlocked onRequestUnlock={cy.stub()} />);
 
         cy.contains('button', 'Enable sync service').should('not.be.disabled').click();
         cy.get('@startHost').should('have.been.called');
@@ -45,9 +37,7 @@ describe('<VaultSync />', () => {
                 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
         });
 
-        cy.mount(
-            <VaultSync isOpen onClose={cy.stub()} sync={sync} isUnlocked onRequestUnlock={cy.stub()} />
-        );
+        cy.mount(<VaultSync isOpen onClose={cy.stub()} sync={sync} isUnlocked onRequestUnlock={cy.stub()} />);
 
         cy.contains('Waiting for the other device to scan').should('be.visible');
         cy.get('img[alt="Sync QR code"]').should('be.visible');
@@ -62,9 +52,7 @@ describe('<VaultSync />', () => {
             remote: {role: 'guest', itemCount: 1}
         });
 
-        cy.mount(
-            <VaultSync isOpen onClose={cy.stub()} sync={sync} isUnlocked onRequestUnlock={cy.stub()} />
-        );
+        cy.mount(<VaultSync isOpen onClose={cy.stub()} sync={sync} isUnlocked onRequestUnlock={cy.stub()} />);
 
         cy.contains('Devices linked — ready to sync').should('be.visible');
         cy.contains('3 keys').should('be.visible');
@@ -82,9 +70,7 @@ describe('<VaultSync />', () => {
             remote: {role: 'guest', itemCount: 5}
         });
 
-        cy.mount(
-            <VaultSync isOpen onClose={cy.stub()} sync={sync} isUnlocked onRequestUnlock={cy.stub()} />
-        );
+        cy.mount(<VaultSync isOpen onClose={cy.stub()} sync={sync} isUnlocked onRequestUnlock={cy.stub()} />);
 
         cy.window().then(win => {
             cy.stub(win, 'confirm').as('confirm').returns(true);
@@ -103,9 +89,7 @@ describe('<VaultSync />', () => {
             remote: {role: 'guest', itemCount: 5}
         });
 
-        cy.mount(
-            <VaultSync isOpen onClose={cy.stub()} sync={sync} isUnlocked onRequestUnlock={cy.stub()} />
-        );
+        cy.mount(<VaultSync isOpen onClose={cy.stub()} sync={sync} isUnlocked onRequestUnlock={cy.stub()} />);
 
         cy.window().then(win => {
             cy.stub(win, 'confirm').returns(true);
@@ -123,12 +107,51 @@ describe('<VaultSync />', () => {
             remote: {role: 'host', itemCount: 4}
         });
 
-        cy.mount(
-            <VaultSync isOpen onClose={cy.stub()} sync={sync} isUnlocked onRequestUnlock={cy.stub()} />
-        );
+        cy.mount(<VaultSync isOpen onClose={cy.stub()} sync={sync} isUnlocked onRequestUnlock={cy.stub()} />);
 
-        cy.contains('Wait for the host to choose a merge strategy').should('be.visible');
+        cy.contains('You will be asked to confirm').should('be.visible');
         cy.contains('Merge strategy').should('not.exist');
+    });
+
+    it('shows guest confirm UI for pending host overwrite', () => {
+        const sync = createMockSync({
+            sessionState: 'connected',
+            role: 'guest',
+            localItemCount: 2,
+            remote: {role: 'host', itemCount: 5},
+            pendingIncoming: {
+                strategy: 'a-overwrites-b',
+                items: [
+                    {
+                        id: '1',
+                        label: 'Demo',
+                        createdAt: '2026-01-01',
+                        updatedAt: '2026-01-01',
+                        keys: [{id: 'k1', label: 'API', value: 'secret'}]
+                    }
+                ]
+            }
+        });
+
+        cy.mount(<VaultSync isOpen onClose={cy.stub()} sync={sync} isUnlocked onRequestUnlock={cy.stub()} />);
+
+        cy.contains('replace THIS vault').should('be.visible');
+        cy.contains('button', 'Accept overwrite').click();
+        cy.get('@acceptIncomingSync').should('have.been.called');
+    });
+
+    it('rejects pending pull request from guest UI', () => {
+        const sync = createMockSync({
+            sessionState: 'connected',
+            role: 'guest',
+            pendingIncoming: {strategy: 'b-overwrites-a'}
+        });
+
+        cy.mount(<VaultSync isOpen onClose={cy.stub()} sync={sync} isUnlocked onRequestUnlock={cy.stub()} />);
+
+        cy.contains('pull THIS vault').should('be.visible');
+        cy.contains('button', 'Reject').click();
+        cy.get('@rejectIncomingSync').should('have.been.called');
     });
 
     it('shows sync complete banner', () => {
@@ -140,9 +163,7 @@ describe('<VaultSync />', () => {
             remote: {role: 'guest', itemCount: 4}
         });
 
-        cy.mount(
-            <VaultSync isOpen onClose={cy.stub()} sync={sync} isUnlocked onRequestUnlock={cy.stub()} />
-        );
+        cy.mount(<VaultSync isOpen onClose={cy.stub()} sync={sync} isUnlocked onRequestUnlock={cy.stub()} />);
 
         cy.contains('Sync complete').should('be.visible');
         cy.contains('4 items applied').should('be.visible');
@@ -152,9 +173,7 @@ describe('<VaultSync />', () => {
         const sync = createMockSync({sessionState: 'waiting', role: 'host', peerId: 'x'});
         const onClose = cy.stub().as('onClose');
 
-        cy.mount(
-            <VaultSync isOpen onClose={onClose} sync={sync} isUnlocked onRequestUnlock={cy.stub()} />
-        );
+        cy.mount(<VaultSync isOpen onClose={onClose} sync={sync} isUnlocked onRequestUnlock={cy.stub()} />);
 
         cy.get('[aria-label="Close"]').click();
         cy.get('@stop').should('have.been.called');

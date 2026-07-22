@@ -1,15 +1,24 @@
 # kbox
 
-<<<<<<< HEAD
+Local-first API key vault. Secrets are encrypted on-device with a PIN (and optional WebAuthn PRF biometrics). Optional peer-to-peer device sync uses WebRTC.
 
-Vite + React + TypeScript.
+## Stack
+
+Vite + React + TypeScript + Tailwind CSS.
+
+## Commands
+
+Use **pnpm** only:
 
 ```bash
-npm install
-npm run dev
+pnpm install
+pnpm dev
+pnpm build
+pnpm lint
+pnpm test
 ```
 
-=======
-API Key Store
+## Notes
 
-> > > > > > > 05601efe8c62ae438073b287bf2cf2d66953f3e7
+- Encrypted secret values live in IndexedDB (with a localStorage backup). Labels and tags are stored in plaintext so the vault stays browsable while locked.
+- Device sync transfers plaintext secrets over a WebRTC data channel after both peers confirm; treat QR / peer IDs as sensitive.
