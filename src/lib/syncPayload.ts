@@ -11,24 +11,37 @@ function isNonEmptyString(value: unknown, maxLen: number): value is string {
 }
 
 function isOptionalString(value: unknown, maxLen: number): boolean {
-    return value === undefined || (typeof value === 'string' && value.length <= maxLen);
+    // Treat null like omitted — PeerJS BinaryPack can turn undefined into null/empty objects
+    // on the wire; callers should still omit non-strings in toSyncPayload.
+    return value === undefined || value === null || (typeof value === 'string' && value.length <= maxLen);
 }
 
 /** Prepare unlocked vault items for P2P transfer (plaintext secrets only). */
 export function toSyncPayload(items: ApiKeyItem[]): ApiKeyItem[] {
-    return items.map(item => ({
-        id: item.id,
-        label: item.label,
-        tag: item.tag,
-        description: item.description,
-        createdAt: item.createdAt,
-        updatedAt: item.updatedAt,
-        keys: item.keys.map(key => ({
-            id: key.id,
-            label: key.label,
-            value: key.value || ''
-        }))
-    }));
+    return items.map(item => {
+        // Omit undefined optionals so PeerJS BinaryPack does not revive them as empty objects
+        // (which would fail isOptionalString on the receiving peer).
+        const payload: ApiKeyItem = {
+            id: item.id,
+            label: item.label,
+            createdAt: item.createdAt,
+            updatedAt: item.updatedAt,
+            keys: item.keys.map(key => ({
+                id: key.id,
+                label: key.label,
+                value: key.value || ''
+            }))
+        };
+
+        if (typeof item.tag === 'string') {
+            payload.tag = item.tag;
+        }
+        if (typeof item.description === 'string') {
+            payload.description = item.description;
+        }
+
+        return payload;
+    });
 }
 
 export function isSyncPayloadValid(items: unknown): items is ApiKeyItem[] {

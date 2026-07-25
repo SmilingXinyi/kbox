@@ -114,7 +114,9 @@ export class WebRtcSyncSession {
 
         this.events.onStateChange?.('connecting');
         try {
-            const conn = peer.connect(hostPeerId, {reliable: true});
+            // JSON avoids BinaryPack turning omitted/undefined optional fields into empty
+            // objects on the receiving peer (which breaks sync payload validation).
+            const conn = peer.connect(hostPeerId, {reliable: true, serialization: 'json'});
             this.attachConnection(conn);
         } catch (err) {
             this.reportError(err, 'Failed to open data channel to host.');

@@ -30,6 +30,21 @@ describe('syncPayload', () => {
         expect(payload[0].keys[0].iv).to.eq(undefined);
     });
 
+    it('omits undefined optional tag/description (BinaryPack-safe)', () => {
+        const payload = toSyncPayload([
+            {
+                id: '1',
+                label: 'Bare',
+                createdAt: '2026-01-01',
+                updatedAt: '2026-01-01',
+                keys: [{id: 'k1', label: 'API', value: 'secret'}]
+            }
+        ]);
+        expect(Object.hasOwn(payload[0], 'tag')).to.eq(false);
+        expect(Object.hasOwn(payload[0], 'description')).to.eq(false);
+        expect(isSyncPayloadValid(payload)).to.eq(true);
+    });
+
     it('validates payload shape', () => {
         expect(isSyncPayloadValid(toSyncPayload(sample))).to.eq(true);
         expect(
@@ -54,6 +69,19 @@ describe('syncPayload', () => {
                     createdAt: '2026-01-01',
                     updatedAt: '2026-01-01',
                     keys: [{id: 'k1', label: 'API', value: 123 as never}]
+                }
+            ])
+        ).to.eq(false);
+        // Empty objects must not pass as optional strings (BinaryPack corruption shape).
+        expect(
+            isSyncPayloadValid([
+                {
+                    id: '1',
+                    label: 'x',
+                    tag: {} as never,
+                    createdAt: '2026-01-01',
+                    updatedAt: '2026-01-01',
+                    keys: [{id: 'k1', label: 'API', value: 'secret'}]
                 }
             ])
         ).to.eq(false);
