@@ -12,6 +12,7 @@ import {
     validatePinStrength
 } from '../../lib/crypto';
 import {isRunningInIframe, isWebAuthnSupported, registerWebAuthnCredential} from '../../lib/webauthn';
+import {isBiometricSimulatorEnabled} from '../../lib/biometricSimulator';
 import BiometricSimulator from './BiometricSimulator';
 import Alert from '../ui/Alert';
 import Button from '../ui/Button';
@@ -25,7 +26,9 @@ export default function VaultSetup({onInitialized}: VaultSetupProps) {
     const [username, setUsername] = useState('vault-owner');
     const [pin, setPin] = useState('');
     const [confirmPin, setConfirmPin] = useState('');
+    const simulatorEnabled = isBiometricSimulatorEnabled();
     const nativeBiometricsSupported = isWebAuthnSupported() && !isRunningInIframe();
+    const canEnrollBiometrics = nativeBiometricsSupported || simulatorEnabled;
     const [enableBiometrics, setEnableBiometrics] = useState(nativeBiometricsSupported);
     const [showSimulator, setShowSimulator] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -85,12 +88,27 @@ export default function VaultSetup({onInitialized}: VaultSetupProps) {
                         return;
                     }
                     if (res.errorMessage) {
-                        setError(`${res.errorMessage} Falling back to biometric sandbox.`);
+                        if (simulatorEnabled) {
+                            setError(`${res.errorMessage} Falling back to biometric sandbox.`);
+                        } else {
+                            setError(`${res.errorMessage} Continuing with PIN only.`);
+                            await onInitialized(masterKeyHex, metadata);
+                            return;
+                        }
+                    } else if (!simulatorEnabled) {
+                        setError('Biometric enrollment failed. Continuing with PIN only.');
+                        await onInitialized(masterKeyHex, metadata);
+                        return;
                     }
                 }
 
-                setShowSimulator(true);
-                setLoading(false);
+                if (simulatorEnabled) {
+                    setShowSimulator(true);
+                    setLoading(false);
+                    return;
+                }
+
+                await onInitialized(masterKeyHex, metadata);
                 return;
             }
 
@@ -234,22 +252,32 @@ export default function VaultSetup({onInitialized}: VaultSetupProps) {
                                     <p className="text-[11px] text-surface-400 leading-normal mt-0.5">
                                         {nativeBiometricsSupported
                                             ? 'Wrap the master key with WebAuthn PRF.'
-                                            : 'Native biometrics unavailable — sandbox simulator will be used.'}
+                                            : simulatorEnabled
+                                              ? 'Native biometrics unavailable — DEV sandbox simulator can be used.'
+                                              : 'Native biometrics unavailable on this device. Use your PIN.'}
                                     </p>
                                 </div>
                             </div>
-                            <label className="relative inline-flex items-center cursor-pointer select-none shrink-0 min-h-11 px-1">
+                            <label
+                                className={`relative inline-flex items-center select-none shrink-0 min-h-11 px-1 ${
+                                    canEnrollBiometrics ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'
+                                }`}
+                            >
                                 <input
                                     type="checkbox"
-                                    checked={enableBiometrics}
-                                    onChange={() => setEnableBiometrics(!enableBiometrics)}
+                                    checked={enableBiometrics && canEnrollBiometrics}
+                                    onChange={() => {
+                                        if (!canEnrollBiometrics) return;
+                                        setEnableBiometrics(!enableBiometrics);
+                                    }}
+                                    disabled={!canEnrollBiometrics}
                                     className="sr-only peer"
                                     aria-label="Enable biometrics"
                                 />
-                                <span className="relative w-10 h-6 bg-surface-700 rounded-full peer-checked:bg-accent peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent transition-colors">
+                                <span className="relative w-10 h-6 bg-surface-700 rounded-full peer-checked:bg-accent peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent transition-colors peer-disabled:opacity-80">
                                     <span
                                         className={`absolute top-1 left-1 h-4 w-4 rounded-full transition-transform ${
-                                            enableBiometrics
+                                            enableBiometrics && canEnrollBiometrics
                                                 ? 'translate-x-4 bg-on-accent'
                                                 : 'translate-x-0 bg-surface-300'
                                         }`}
@@ -284,7 +312,7 @@ export default function VaultSetup({onInitialized}: VaultSetupProps) {
             </motion.div>
 
             <BiometricSimulator
-                isOpen={showSimulator}
+                isOpen={showSimulator && simulatorEnabled}
                 onClose={() => setShowSimulator(false)}
                 onSuccess={handleSimulatorSuccess}
                 onFail={msg => setError(msg)}

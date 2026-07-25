@@ -27,6 +27,13 @@ type VaultSyncProps = {
 
 const SCANNER_REGION_ID = 'kbox-sync-qr-reader';
 
+function isAbortLikeError(err: unknown): boolean {
+    if (!err || typeof err !== 'object') return false;
+    const name = 'name' in err ? String(err.name) : '';
+    const message = 'message' in err ? String(err.message) : String(err);
+    return name === 'AbortError' || /abort|not scanning|scan is ongoing/i.test(message);
+}
+
 export default function VaultSync({isOpen, onClose, sync, isUnlocked, onRequestUnlock}: VaultSyncProps) {
     const [manualPeerId, setManualPeerId] = useState('');
     const [scanError, setScanError] = useState<string | null>(null);
@@ -34,34 +41,62 @@ export default function VaultSync({isOpen, onClose, sync, isUnlocked, onRequestU
     const handledScanRef = useRef(false);
     /** Monotonic token so overlapping start/stop cycles ignore stale async completions. */
     const scannerGenerationRef = useRef(0);
-    const scannerStoppingRef = useRef(false);
+    /** Serialize stop/clear so start ↔ cleanup races cannot clear while still scanning. */
+    const scannerStopChainRef = useRef<Promise<void>>(Promise.resolve());
     const connectWithQrTextRef = useRef(sync.connectWithQrText);
 
     useEffect(() => {
         connectWithQrTextRef.current = sync.connectWithQrText;
     }, [sync.connectWithQrText]);
 
-    const stopScanner = async (expectedGeneration?: number) => {
-        if (scannerStoppingRef.current) return;
-        const scanner = scannerRef.current;
-        if (!scanner) return;
+    const stopScanner = (expectedGeneration?: number) => {
+        const run = async () => {
+            const scanner = scannerRef.current;
+            if (!scanner) return;
 
-        if (expectedGeneration != null && scannerGenerationRef.current !== expectedGeneration) {
-            return;
-        }
-
-        scannerStoppingRef.current = true;
-        scannerRef.current = null;
-        try {
-            if (scanner.isScanning) {
-                await scanner.stop();
+            if (expectedGeneration != null && scannerGenerationRef.current !== expectedGeneration) {
+                return;
             }
-            scanner.clear();
-        } catch (err) {
-            console.warn('QR scanner stop/clear failed:', err);
-        } finally {
-            scannerStoppingRef.current = false;
-        }
+
+            // Detach immediately so a concurrent start does not reuse this instance.
+            scannerRef.current = null;
+
+            try {
+                // Prefer stop whenever the library reports an active scan; fall back to
+                // best-effort stop for transitional states where isScanning is stale.
+                if (scanner.isScanning) {
+                    await scanner.stop();
+                }
+            } catch (err) {
+                if (!isAbortLikeError(err)) {
+                    console.warn('QR scanner stop failed:', err);
+                }
+            }
+
+            try {
+                if (scanner.isScanning) {
+                    await scanner.stop();
+                }
+            } catch (err) {
+                if (!isAbortLikeError(err)) {
+                    console.warn('QR scanner second stop failed:', err);
+                }
+            }
+
+            try {
+                // Html5Qrcode throws if clear() runs while a scan is still active.
+                if (!scanner.isScanning) {
+                    scanner.clear();
+                }
+            } catch (err) {
+                if (!isAbortLikeError(err)) {
+                    console.warn('QR scanner clear failed:', err);
+                }
+            }
+        };
+
+        scannerStopChainRef.current = scannerStopChainRef.current.then(run, run);
+        return scannerStopChainRef.current;
     };
 
     const stopRef = useRef(sync.stop);
@@ -108,7 +143,9 @@ export default function VaultSync({isOpen, onClose, sync, isUnlocked, onRequestU
                     try {
                         scanner.clear();
                     } catch (err) {
-                        console.warn('Abandoned QR scanner clear failed:', err);
+                        if (!isAbortLikeError(err)) {
+                            console.warn('Abandoned QR scanner clear failed:', err);
+                        }
                     }
                     return;
                 }
@@ -134,8 +171,13 @@ export default function VaultSync({isOpen, onClose, sync, isUnlocked, onRequestU
                     void stopScanner(generation);
                 }
             } catch (e) {
+                // Manual peer-ID connect (or effect cleanup) often aborts an in-flight start.
+                if (cancelled || scannerGenerationRef.current !== generation || isAbortLikeError(e)) {
+                    void stopScanner(generation);
+                    return;
+                }
                 console.error('QR scanner failed:', e);
-                if (!cancelled && scannerGenerationRef.current === generation) {
+                if (scannerGenerationRef.current === generation) {
                     setScanError(
                         e instanceof Error ? e.message : 'Camera access failed. Enter the peer ID manually instead.'
                     );
