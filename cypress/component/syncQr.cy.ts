@@ -1,8 +1,4 @@
-import {
-    encodeSyncQrPayload,
-    parseSyncQrPayload,
-    renderSyncQrDataUrl
-} from '../../src/lib/syncQr';
+import {encodeSyncQrPayload, parseSyncQrPayload, renderSyncQrDataUrl} from '../../src/lib/syncQr';
 
 describe('syncQr', () => {
     const peerId = 'abcDEFghiJKLmnop';

@@ -1,14 +1,38 @@
 // Bump this when caching strategy or shell assets change so old caches are dropped.
-const CACHE_NAME = 'kbox-v3';
-const STABLE_ASSETS = ['/manifest.json', '/icon.svg'];
+const CACHE_NAME = 'kbox-v5';
+const STABLE_ASSETS = [
+    '/',
+    '/manifest.json',
+    '/kbox.svg',
+    '/kbox.webp',
+    '/icons/icon-192.png',
+    '/icons/icon-512.png',
+    '/icons/icon-maskable-192.png',
+    '/icons/icon-maskable-512.png',
+    '/icons/apple-touch-icon.png'
+];
+
+async function precacheStableAssets() {
+    const cache = await caches.open(CACHE_NAME);
+    await Promise.all(
+        STABLE_ASSETS.map(async url => {
+            try {
+                const response = await fetch(url, {cache: 'reload'});
+                if (response.ok) {
+                    await cache.put(url, response);
+                } else {
+                    console.warn('Service worker precache skipped (non-OK):', url, response.status);
+                }
+            } catch (err) {
+                console.warn('Service worker precache failed:', url, err);
+            }
+        })
+    );
+}
 
 self.addEventListener('install', event => {
-    event.waitUntil(
-        caches
-            .open(CACHE_NAME)
-            .then(cache => cache.addAll(STABLE_ASSETS))
-            .then(() => self.skipWaiting())
-    );
+    // Do not skipWaiting here — the client prompts the user, then posts SKIP_WAITING.
+    event.waitUntil(precacheStableAssets());
 });
 
 self.addEventListener('activate', event => {

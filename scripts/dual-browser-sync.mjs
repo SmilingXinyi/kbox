@@ -44,7 +44,10 @@ async function setupVault(page, ownerName) {
     await pinInputs.nth(1).fill(PIN);
 
     // Disable biometrics to avoid WebAuthn / simulator in automation.
-    const biometricToggle = page.locator('label').filter({has: page.locator('input[type="checkbox"]')}).last();
+    const biometricToggle = page
+        .locator('label')
+        .filter({has: page.locator('input[type="checkbox"]')})
+        .last();
     const checked = await page.locator('input[type="checkbox"]').isChecked();
     if (checked) {
         await biometricToggle.click();
@@ -117,9 +120,7 @@ async function closeSync(page) {
     const x = page.locator('[role="dialog"] button[aria-label="Close"]');
     if (await x.count()) {
         await x.first().click();
-        await page
-            .getByRole('heading', {name: 'Device sync'})
-            .waitFor({state: 'hidden', timeout: TIMEOUT.close});
+        await page.getByRole('heading', {name: 'Device sync'}).waitFor({state: 'hidden', timeout: TIMEOUT.close});
         return;
     }
     await page.keyboard.press('Escape');
