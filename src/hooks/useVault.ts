@@ -21,6 +21,7 @@ import {
 } from '../lib/vaultMigration';
 import {decryptItemsInMemory, serializeAndEncryptItems} from '../lib/vaultItems';
 import {getWebAuthnAssertion} from '../lib/webauthn';
+import {isBiometricSimulatorEnabled} from '../lib/biometricSimulator';
 import {useAutoLock} from './useAutoLock';
 
 export function useVault() {
@@ -248,8 +249,16 @@ export function useVault() {
         let prfOutput: BufferSource;
 
         if (simulatedKeyMaterialHex) {
+            if (!isBiometricSimulatorEnabled()) {
+                throw new Error('Biometric sandbox is disabled. Use your PIN instead.');
+            }
             prfOutput = hexToArrayBuffer(simulatedKeyMaterialHex);
         } else if (keySource === 'simulated') {
+            if (!isBiometricSimulatorEnabled()) {
+                throw new Error(
+                    'This vault was enrolled with the biometric sandbox, which is disabled here. Use your PIN instead.'
+                );
+            }
             throw new Error('Biometric sandbox required.');
         } else {
             if (!metadata.webauthnPrfSalt) {

@@ -19,7 +19,7 @@ export type ApiKeyItem = {
 /**
  * How the WebAuthn-wrapped master key was derived.
  * - `prf`: WebAuthn PRF extension → HKDF → AES-GCM KEK
- * - `simulated`: BiometricSimulator stable key material (dev / iframe sandbox)
+ * - `simulated`: BiometricSimulator stable key material (DEV / explicit flag only)
  */
 export type WebAuthnKeySource = 'prf' | 'simulated';
 

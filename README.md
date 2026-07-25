@@ -22,3 +22,4 @@ pnpm test
 
 - Encrypted secret values live in IndexedDB (with a localStorage backup). Labels and tags are stored in plaintext so the vault stays browsable while locked.
 - Device sync transfers plaintext secrets over a WebRTC data channel after both peers confirm; treat QR / peer IDs as sensitive.
+- BiometricSimulator (fixed key material) is **DEV-only** by default. Production builds never open it unless `VITE_ENABLE_BIOMETRIC_SIMULATOR=true` (preview sandboxes only).

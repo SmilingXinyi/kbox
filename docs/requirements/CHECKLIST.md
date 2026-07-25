@@ -108,15 +108,15 @@
 
 ## Backlog（不阻塞）
 
-- [ ] B1 PWA
-- [ ] B2 BiometricSimulator
-- [ ] B3 WebAuthn RP / 随机 challenge
+- [x] B1 PWA（manifest + SW + `usePWA` 更新提示；见 `4894d96`）
+- [x] B2 BiometricSimulator（仅 DEV / `VITE_ENABLE_BIOMETRIC_SIMULATOR`）
+- [ ] B3 WebAuthn RP / 服务端 challenge
 - [ ] B4 子路由
-- [ ] B5 单元测试
+- [ ] B5 单元测试（crypto / vaultItems）
 - [ ] B6 加密备份
 - [ ] B7 启动强制解锁选项
 - [ ] B8 Owner name 持久化
-- [ ] B9 E2E
+- [x] B9 E2E 冒烟（Cypress component + `pnpm test:dual-sync` Playwright）
 
 详见 [99-backlog.md](./99-backlog.md)
 

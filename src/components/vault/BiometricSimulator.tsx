@@ -120,8 +120,8 @@ export default function BiometricSimulator({
                                 WebAuthn Sandbox Simulator
                             </span>
                         </div>
-                        <span className="px-1.5 py-0.5 text-[9px] font-mono rounded bg-surface-800 text-surface-400 border border-surface-700">
-                            Fallback
+                        <span className="px-1.5 py-0.5 text-[9px] font-mono rounded bg-warn/15 text-warn border border-warn/30">
+                            Non-production
                         </span>
                     </div>
 

@@ -25,7 +25,7 @@
 
 **风险**：开发态 HMR 与 SW 冲突；需 `dev` 可禁用 SW
 
-- [ ] 未开始
+- [x] 已实现（`registerServiceWorker` + `usePWA` + `public/sw.js`；生产默认注册）
 
 ---
 
@@ -37,7 +37,7 @@
 
 **风险**：固定签名降低安全性；文档必须标明「non-production」
 
-- [ ] 未开始
+- [x] 已实现：`src/lib/biometricSimulator.ts` 门控；生产默认关闭；UI 标注 Non-production
 
 ---
 
@@ -49,7 +49,9 @@
 
 **依赖**：后端（AGENTS 默认不做，需单独立项）
 
-- [ ] 未开始
+**备注**：客户端 challenge 已改为每次随机；仍无服务端 attestation。
+
+- [ ] 未开始（服务端部分）
 
 ---
 
@@ -75,7 +77,7 @@
 - serialize ↔ decrypt round-trip
 - legacy key 检测
 
-- [ ] 未开始
+- [ ] 未开始（已有 Cypress component：sync / PWA / QR；缺 crypto 单测）
 
 ---
 
@@ -115,7 +117,7 @@
 
 **建议**：覆盖 Setup → Add → Lock → Unlock → Reset（WebAuthn 可 mock）
 
-- [ ] 未开始
+- [x] 部分完成：`pnpm test`（Cypress component）+ `pnpm test:dual-sync`（双浏览器 WebRTC 同步）
 
 ---
 
@@ -131,6 +133,6 @@
 
 ## Done
 
-（实现后移到此处）
-
-_None yet._
+- B1 PWA（manifest / SW / update banner）
+- B2 BiometricSimulator DEV-only gate
+- B9 部分：Cypress component + dual-browser sync smoke

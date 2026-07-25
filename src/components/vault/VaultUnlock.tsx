@@ -3,6 +3,7 @@ import {motion} from 'motion/react';
 import {Fingerprint, Key, Lock, RefreshCw, X} from 'lucide-react';
 import type {VaultMetadata, ResidualUnlockResult} from '../../types/vault';
 import {PIN_MAX_LENGTH} from '../../lib/crypto';
+import {isBiometricSimulatorEnabled} from '../../lib/biometricSimulator';
 import BiometricSimulator from './BiometricSimulator';
 import Alert from '../ui/Alert';
 import Button from '../ui/Button';
@@ -27,6 +28,7 @@ export default function VaultUnlock({
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [showSimulator, setShowSimulator] = useState(false);
+    const simulatorEnabled = isBiometricSimulatorEnabled();
 
     useEffect(() => {
         const onKeyDown = (e: KeyboardEvent) => {
@@ -60,12 +62,13 @@ export default function VaultUnlock({
             if (residual) onResidualAction?.(residual);
         } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : 'Biometric authentication failed.';
-            if (
-                msg.includes('iframe') ||
-                msg.includes('not supported') ||
-                msg.includes('not initialized') ||
-                msg.includes('sandbox required')
-            ) {
+            const canUseSimulator =
+                simulatorEnabled &&
+                (msg.includes('iframe') ||
+                    msg.includes('not supported') ||
+                    msg.includes('not initialized') ||
+                    msg.includes('sandbox required'));
+            if (canUseSimulator) {
                 setShowSimulator(true);
             } else {
                 setError(`${msg} Try your PIN.`);
@@ -158,7 +161,7 @@ export default function VaultUnlock({
                 </div>
 
                 <BiometricSimulator
-                    isOpen={showSimulator}
+                    isOpen={showSimulator && simulatorEnabled}
                     onClose={() => setShowSimulator(false)}
                     onSuccess={sig => {
                         setShowSimulator(false);

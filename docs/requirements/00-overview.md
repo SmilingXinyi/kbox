@@ -46,10 +46,12 @@ unlocked ──reset──► uninitialized
 ### Key hierarchy
 
 ```text
-PIN ──PBKDF2(100k, SHA-256, salt)──► KEK_pin ──AES-GCM──► encryptedMasterKeyWithPin
-WebAuthn signatureHex ──UTF-8 SHA-256──► KEK_webauthn ──AES-GCM──► encryptedMasterKeyWithWebAuthn
+PIN ──PBKDF2(600k, SHA-256, salt)──► KEK_pin ──AES-GCM──► encryptedMasterKeyWithPin
+WebAuthn PRF ──HKDF──► KEK_webauthn ──AES-GCM──► encryptedMasterKeyWithWebAuthn
 Master Key (32-byte hex) ──AES-GCM──► 每个 KeyEntry.value（v2 逐字段）
 ```
+
+> BiometricSimulator（固定材料）仅 `import.meta.env.DEV` 或 `VITE_ENABLE_BIOMETRIC_SIMULATOR=true` 可用；生产默认关闭。
 
 ## Confirmed decisions
 
