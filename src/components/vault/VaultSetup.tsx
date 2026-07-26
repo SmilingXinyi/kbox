@@ -186,7 +186,14 @@ export default function VaultSetup({onInitialized}: VaultSetupProps) {
 
                 <div className="p-5 sm:p-6">
                     <div className="flex flex-col items-center mb-6 text-center">
-                        <p className="font-display text-3xl font-bold tracking-tight text-accent mb-4">kbox</p>
+                        <img
+                            src={`${import.meta.env.BASE_URL}kbox.svg`}
+                            alt="KBox"
+                            className="h-8 w-auto mb-4"
+                            width={124}
+                            height={36}
+                            decoding="async"
+                        />
                         <div className="p-3 bg-accent-muted border border-accent/30 rounded-xl mb-3 text-accent">
                             <ShieldCheck className="w-8 h-8" aria-hidden />
                         </div>

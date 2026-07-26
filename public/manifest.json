@@ -1,6 +1,6 @@
 {
-    "name": "kbox",
-    "short_name": "kbox",
+    "name": "KBox",
+    "short_name": "KBox",
     "description": "An end-to-end encrypted API Key wallet with biometric simulated authentication.",
     "id": "./",
     "start_url": "./",
