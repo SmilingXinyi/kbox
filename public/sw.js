@@ -1,16 +1,18 @@
 // Bump this when caching strategy or shell assets change so old caches are dropped.
-const CACHE_NAME = 'kbox-v5';
+const CACHE_NAME = 'kbox-v6';
+/** Resolve against the SW URL so project-site bases (e.g. /kbox/) work. */
+const assetUrl = path => new URL(path, self.location).href;
 const STABLE_ASSETS = [
-    '/',
-    '/manifest.json',
-    '/kbox.svg',
-    '/kbox.webp',
-    '/icons/icon-192.png',
-    '/icons/icon-512.png',
-    '/icons/icon-maskable-192.png',
-    '/icons/icon-maskable-512.png',
-    '/icons/apple-touch-icon.png'
-];
+    './',
+    './manifest.json',
+    './kbox.svg',
+    './kbox.webp',
+    './icons/icon-192.png',
+    './icons/icon-512.png',
+    './icons/icon-maskable-192.png',
+    './icons/icon-maskable-512.png',
+    './icons/apple-touch-icon.png'
+].map(assetUrl);
 
 async function precacheStableAssets() {
     const cache = await caches.open(CACHE_NAME);
@@ -49,8 +51,8 @@ function isNavigationRequest(request) {
 }
 
 function isVersionedAsset(pathname) {
-    // Vite hashed bundles under /assets/ — safe to cache once fetched.
-    return pathname.startsWith('/assets/');
+    // Vite hashed bundles under .../assets/ — safe to cache once fetched.
+    return pathname.includes('/assets/');
 }
 
 self.addEventListener('fetch', event => {
@@ -64,7 +66,7 @@ self.addEventListener('fetch', event => {
     }
 
     // App shell / HTML: network-first so security fixes ship without a stale document.
-    if (isNavigationRequest(event.request) || url.pathname === '/' || url.pathname.endsWith('.html')) {
+    if (isNavigationRequest(event.request) || url.pathname.endsWith('.html')) {
         event.respondWith(
             fetch(event.request)
                 .then(networkResponse => {
@@ -77,7 +79,7 @@ self.addEventListener('fetch', event => {
                 .catch(async () => {
                     const cached = await caches.match(event.request);
                     if (cached) return cached;
-                    return caches.match('/');
+                    return caches.match(assetUrl('./'));
                 })
         );
         return;

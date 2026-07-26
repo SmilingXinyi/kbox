@@ -14,7 +14,8 @@ export function registerServiceWorker(options: RegisterServiceWorkerOptions = {}
     }
 
     const register = () => {
-        void navigator.serviceWorker.register('/sw.js').catch(err => {
+        const swUrl = `${import.meta.env.BASE_URL}sw.js`;
+        void navigator.serviceWorker.register(swUrl).catch(err => {
             console.warn('PWA Service Worker registration failed:', err);
         });
     };
