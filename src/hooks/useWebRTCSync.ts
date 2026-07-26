@@ -1,8 +1,15 @@
 import {useEffect, useRef, useState} from 'react';
 import type {ApiKeyItem} from '../types/vault';
-import type {SyncPeerSummary, SyncRole, SyncSessionState, SyncStrategy} from '../types/sync';
-import {parseSyncQrPayload, renderSyncQrDataUrl} from '../lib/syncQr';
-import {toSyncPayload, isSyncPayloadValid} from '../lib/syncPayload';
+import type {SyncEncryptedEnvelope, SyncPeerSummary, SyncRole, SyncSessionState, SyncStrategy} from '../types/sync';
+import {encodeSyncQrPayload, parseSyncQrPayload, renderSyncQrDataUrl} from '../lib/syncQr';
+import {toSyncPayload} from '../lib/syncPayload';
+import {
+    decryptSyncItems,
+    encryptSyncItems,
+    generateSyncSessionKeyHex,
+    importSyncSessionKey,
+    syncKeyConfirmFingerprint
+} from '../lib/syncCrypto';
 import {WebRtcSyncSession} from '../lib/webrtcSync';
 
 type UseWebRTCSyncOptions = {
@@ -19,6 +26,8 @@ export function useWebRTCSync({localItems, onReplaceItems}: UseWebRTCSyncOptions
     const [sessionState, setSessionState] = useState<SyncSessionState>('idle');
     const [role, setRole] = useState<SyncRole | null>(null);
     const [peerId, setPeerId] = useState<string | null>(null);
+    const [inviteText, setInviteText] = useState<string | null>(null);
+    const [pairingCode, setPairingCode] = useState<string | null>(null);
     const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
     const [remote, setRemote] = useState<SyncPeerSummary | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -27,6 +36,8 @@ export function useWebRTCSync({localItems, onReplaceItems}: UseWebRTCSyncOptions
 
     const sessionRef = useRef<WebRtcSyncSession | null>(null);
     const pendingStrategyRef = useRef<SyncStrategy | null>(null);
+    const sessionKeyRef = useRef<CryptoKey | null>(null);
+    const keyConfirmRef = useRef<string | null>(null);
 
     /**
      * PeerJS / data-channel handlers are registered once when the session starts.
@@ -48,7 +59,11 @@ export function useWebRTCSync({localItems, onReplaceItems}: UseWebRTCSyncOptions
         sessionRef.current?.destroy();
         sessionRef.current = null;
         pendingStrategyRef.current = null;
+        sessionKeyRef.current = null;
+        keyConfirmRef.current = null;
         setPeerId(null);
+        setInviteText(null);
+        setPairingCode(null);
         setQrDataUrl(null);
         setRemote(null);
         setPendingIncoming(null);
@@ -64,18 +79,34 @@ export function useWebRTCSync({localItems, onReplaceItems}: UseWebRTCSyncOptions
         };
     }, []);
 
-    const handleIncomingSyncRequest = (strategy: SyncStrategy, items: ApiKeyItem[] | undefined) => {
+    const requireSessionKey = (): CryptoKey => {
+        const key = sessionKeyRef.current;
+        if (!key) {
+            throw new Error('Missing sync session key. Restart pairing from the host QR.');
+        }
+        return key;
+    };
+
+    const handleIncomingSyncRequest = async (strategy: SyncStrategy, envelope: SyncEncryptedEnvelope | undefined) => {
         const session = sessionRef.current;
         if (!session) return;
 
         // Never auto-apply or auto-send — guest must confirm in the UI.
         if (strategy === 'a-overwrites-b') {
-            if (!items || !isSyncPayloadValid(items)) {
-                session.sendSyncReject('Missing vault payload from host.');
+            if (!envelope) {
+                session.sendSyncReject('Missing encrypted vault payload from host.');
                 return;
             }
-            setPendingIncoming({strategy: 'a-overwrites-b', items});
-            setSessionState('connected');
+            try {
+                const items = await decryptSyncItems(envelope, requireSessionKey());
+                setPendingIncoming({strategy: 'a-overwrites-b', items});
+                setSessionState('connected');
+            } catch (e) {
+                const message = e instanceof Error ? e.message : 'Failed to decrypt host vault.';
+                session.sendSyncReject(message);
+                setError(message);
+                setSessionState('connected');
+            }
             return;
         }
 
@@ -85,13 +116,17 @@ export function useWebRTCSync({localItems, onReplaceItems}: UseWebRTCSyncOptions
         }
     };
 
-    const handleIncomingSyncData = async (items: ApiKeyItem[]) => {
+    const handleIncomingSyncData = async (envelope: SyncEncryptedEnvelope) => {
         const session = sessionRef.current;
         if (!session) return;
 
-        if (!isSyncPayloadValid(items)) {
-            setError('Received invalid vault payload.');
-            session.sendSyncReject('Invalid vault payload.');
+        let items: ApiKeyItem[];
+        try {
+            items = await decryptSyncItems(envelope, requireSessionKey());
+        } catch (e) {
+            const message = e instanceof Error ? e.message : 'Failed to decrypt guest vault.';
+            setError(message);
+            session.sendSyncReject(message);
             setSessionState('connected');
             pendingStrategyRef.current = null;
             return;
@@ -149,7 +184,8 @@ export function useWebRTCSync({localItems, onReplaceItems}: UseWebRTCSyncOptions
 
         // Guest confirmed sending local vault to host (b-overwrites-a).
         try {
-            session.sendSyncData(toSyncPayload(localItemsRef.current));
+            const envelope = await encryptSyncItems(toSyncPayload(localItemsRef.current), requireSessionKey());
+            session.sendSyncData(envelope);
             setPendingIncoming(null);
             // Stay in syncing until host replies with sync-complete.
         } catch (e) {
@@ -168,10 +204,10 @@ export function useWebRTCSync({localItems, onReplaceItems}: UseWebRTCSyncOptions
         setSessionState('connected');
     };
 
-    const createSession = (nextRole: SyncRole) => {
+    const createSession = (nextRole: SyncRole, keyConfirm: string) => {
         sessionRef.current?.destroy();
 
-        const session = new WebRtcSyncSession(nextRole, {
+        const session = new WebRtcSyncSession(nextRole, keyConfirm, {
             onPeerId: id => setPeerId(id),
             onStateChange: state => {
                 if (state === 'waiting') setSessionState('waiting');
@@ -184,11 +220,11 @@ export function useWebRTCSync({localItems, onReplaceItems}: UseWebRTCSyncOptions
                 }
             },
             onRemoteSummary: summary => setRemote(summary),
-            onIncomingSyncRequest: (strategy, items) => {
-                handleIncomingSyncRequest(strategy, items);
+            onIncomingSyncRequest: (strategy, envelope) => {
+                void handleIncomingSyncRequest(strategy, envelope);
             },
-            onIncomingSyncData: items => {
-                void handleIncomingSyncData(items);
+            onIncomingSyncData: envelope => {
+                void handleIncomingSyncData(envelope);
             },
             onSyncComplete: count => {
                 setLastSyncedCount(count);
@@ -205,6 +241,9 @@ export function useWebRTCSync({localItems, onReplaceItems}: UseWebRTCSyncOptions
             },
             onError: message => {
                 setError(message);
+            },
+            onKeyMismatch: () => {
+                setError('Pairing key mismatch. Rescan the host QR or paste the full invite.');
             }
         });
 
@@ -217,13 +256,24 @@ export function useWebRTCSync({localItems, onReplaceItems}: UseWebRTCSyncOptions
         setRemote(null);
         setPendingIncoming(null);
         setLastSyncedCount(null);
+        setInviteText(null);
+        setPairingCode(null);
         setRole('host');
         setSessionState('starting');
 
         try {
-            const session = createSession('host');
+            const sessionKeyHex = generateSyncSessionKeyHex();
+            const cryptoKey = await importSyncSessionKey(sessionKeyHex);
+            const keyConfirm = await syncKeyConfirmFingerprint(sessionKeyHex);
+            sessionKeyRef.current = cryptoKey;
+            keyConfirmRef.current = keyConfirm;
+            setPairingCode(keyConfirm);
+
+            const session = createSession('host', keyConfirm);
             const id = await session.startHost(localItemsRef.current.length);
-            const dataUrl = await renderSyncQrDataUrl(id);
+            const invite = encodeSyncQrPayload(id, sessionKeyHex);
+            const dataUrl = await renderSyncQrDataUrl(id, sessionKeyHex);
+            setInviteText(invite);
             setQrDataUrl(dataUrl);
             setSessionState('waiting');
         } catch (e) {
@@ -240,6 +290,10 @@ export function useWebRTCSync({localItems, onReplaceItems}: UseWebRTCSyncOptions
         setLastSyncedCount(null);
         setQrDataUrl(null);
         setPeerId(null);
+        setInviteText(null);
+        setPairingCode(null);
+        sessionKeyRef.current = null;
+        keyConfirmRef.current = null;
         setRole('guest');
         setSessionState('scanning');
     };
@@ -247,7 +301,7 @@ export function useWebRTCSync({localItems, onReplaceItems}: UseWebRTCSyncOptions
     const connectWithQrText = async (raw: string) => {
         const payload = parseSyncQrPayload(raw);
         if (!payload) {
-            setError('Invalid sync QR code.');
+            setError('Invalid sync invite. Paste the full invite from the host (not only the peer ID).');
             return;
         }
 
@@ -256,7 +310,15 @@ export function useWebRTCSync({localItems, onReplaceItems}: UseWebRTCSyncOptions
         setSessionState('connecting');
 
         try {
-            const session = createSession('guest');
+            const cryptoKey = await importSyncSessionKey(payload.sk);
+            const keyConfirm = await syncKeyConfirmFingerprint(payload.sk);
+            sessionKeyRef.current = cryptoKey;
+            keyConfirmRef.current = keyConfirm;
+            setPairingCode(keyConfirm);
+            setPeerId(payload.peerId);
+            setInviteText(encodeSyncQrPayload(payload.peerId, payload.sk));
+
+            const session = createSession('guest', keyConfirm);
             await session.connectAsGuest(payload.peerId, localItemsRef.current.length);
         } catch (e) {
             console.error('Failed to connect as guest:', e);
@@ -276,14 +338,22 @@ export function useWebRTCSync({localItems, onReplaceItems}: UseWebRTCSyncOptions
         setSessionState('syncing');
         pendingStrategyRef.current = strategy;
 
-        if (strategy === 'a-overwrites-b') {
-            // Host pushes local vault to guest (guest must still confirm before applying).
-            session.sendSyncRequest(strategy, toSyncPayload(localItemsRef.current));
-            return;
-        }
+        try {
+            if (strategy === 'a-overwrites-b') {
+                const envelope = await encryptSyncItems(toSyncPayload(localItemsRef.current), requireSessionKey());
+                session.sendSyncRequest(strategy, envelope);
+                return;
+            }
 
-        // Host asks guest for vault; guest confirms before sending; host applies on sync-data.
-        session.sendSyncRequest(strategy);
+            // Host asks guest for vault; guest confirms before sending; host applies on sync-data.
+            session.sendSyncRequest(strategy);
+        } catch (e) {
+            console.error('Failed to start sync strategy:', e);
+            const message = e instanceof Error ? e.message : 'Failed to encrypt vault for sync.';
+            setError(message);
+            setSessionState('connected');
+            pendingStrategyRef.current = null;
+        }
     };
 
     const stop = () => {
@@ -294,6 +364,8 @@ export function useWebRTCSync({localItems, onReplaceItems}: UseWebRTCSyncOptions
         sessionState,
         role,
         peerId,
+        inviteText,
+        pairingCode,
         qrDataUrl,
         remote,
         error,

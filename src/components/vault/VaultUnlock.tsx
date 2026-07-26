@@ -1,4 +1,4 @@
-import {useEffect, useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import {motion} from 'motion/react';
 import {Fingerprint, Key, Lock, RefreshCw, X} from 'lucide-react';
 import type {VaultMetadata, ResidualUnlockResult} from '../../types/vault';
@@ -28,7 +28,10 @@ export default function VaultUnlock({
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [showSimulator, setShowSimulator] = useState(false);
+    const [showPinForm, setShowPinForm] = useState(!metadata.hasWebAuthn);
     const simulatorEnabled = isBiometricSimulatorEnabled();
+    const preferBiometrics = metadata.hasWebAuthn && metadata.webauthnKeySource !== 'simulated';
+    const autoPromptedRef = useRef(false);
 
     useEffect(() => {
         const onKeyDown = (e: KeyboardEvent) => {
@@ -37,6 +40,49 @@ export default function VaultUnlock({
         window.addEventListener('keydown', onKeyDown);
         return () => window.removeEventListener('keydown', onKeyDown);
     }, [onClose, showSimulator]);
+
+    const handleBiometricUnlock = async (simulatedKeyMaterialHex?: string) => {
+        setError(null);
+        setLoading(true);
+        try {
+            const residual = await onUnlockWithWebAuthn(simulatedKeyMaterialHex);
+            if (residual) onResidualAction?.(residual);
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : 'Biometric authentication failed.';
+            const cancelled =
+                msg.toLowerCase().includes('not allowed') ||
+                msg.toLowerCase().includes('cancel') ||
+                msg.toLowerCase().includes('abort');
+            const canUseSimulator =
+                simulatorEnabled &&
+                (msg.includes('iframe') ||
+                    msg.includes('not supported') ||
+                    msg.includes('not initialized') ||
+                    msg.includes('sandbox required'));
+            if (canUseSimulator) {
+                setShowSimulator(true);
+            } else {
+                if (!cancelled) {
+                    setError(`${msg} Try your PIN.`);
+                }
+                setShowPinForm(true);
+            }
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Prefer Face ID / Touch ID: auto-prompt once when the unlock sheet opens.
+    useEffect(() => {
+        if (!preferBiometrics || autoPromptedRef.current) return;
+        autoPromptedRef.current = true;
+        const timer = window.setTimeout(() => {
+            void handleBiometricUnlock();
+        }, 280);
+        return () => window.clearTimeout(timer);
+        // Intentionally run once on mount for this unlock session.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const handlePinUnlock = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -49,30 +95,6 @@ export default function VaultUnlock({
             if (residual) onResidualAction?.(residual);
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : 'Incorrect PIN.');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleBiometricUnlock = async (simulatedKeyMaterialHex?: string) => {
-        setError(null);
-        setLoading(true);
-        try {
-            const residual = await onUnlockWithWebAuthn(simulatedKeyMaterialHex);
-            if (residual) onResidualAction?.(residual);
-        } catch (err: unknown) {
-            const msg = err instanceof Error ? err.message : 'Biometric authentication failed.';
-            const canUseSimulator =
-                simulatorEnabled &&
-                (msg.includes('iframe') ||
-                    msg.includes('not supported') ||
-                    msg.includes('not initialized') ||
-                    msg.includes('sandbox required'));
-            if (canUseSimulator) {
-                setShowSimulator(true);
-            } else {
-                setError(`${msg} Try your PIN.`);
-            }
         } finally {
             setLoading(false);
         }
@@ -103,13 +125,19 @@ export default function VaultUnlock({
 
                     <div className="flex flex-col items-center mb-6 text-center pt-1">
                         <div className="p-3.5 bg-accent-muted border border-accent/30 rounded-xl text-accent mb-3">
-                            <Lock className="w-7 h-7" aria-hidden />
+                            {preferBiometrics ? (
+                                <Fingerprint className="w-7 h-7" aria-hidden />
+                            ) : (
+                                <Lock className="w-7 h-7" aria-hidden />
+                            )}
                         </div>
                         <h2 id="vault-unlock-title" className="font-display text-lg font-semibold text-surface-100">
-                            Authenticate to continue
+                            {preferBiometrics ? 'Unlock with Face ID / Touch ID' : 'Authenticate to continue'}
                         </h2>
                         <p className="text-xs text-surface-400 mt-1.5 max-w-xs leading-relaxed">
-                            Enter your PIN or use biometrics to reveal or edit secrets.
+                            {preferBiometrics
+                                ? 'Confirm with biometrics to reveal or edit secrets. Your PIN remains available as backup.'
+                                : 'Enter your PIN or use biometrics to reveal or edit secrets.'}
                         </p>
                     </div>
 
@@ -121,43 +149,73 @@ export default function VaultUnlock({
 
                     {metadata.hasWebAuthn && (
                         <Button
-                            variant="secondary"
+                            variant="primary"
                             fullWidth
                             disabled={loading}
                             className="mb-3"
                             onClick={() => void handleBiometricUnlock()}
                         >
-                            <Fingerprint className="w-4 h-4 text-accent" aria-hidden />
-                            Unlock with biometrics
+                            {loading && preferBiometrics && !showPinForm ? (
+                                <>
+                                    <RefreshCw className="w-4 h-4 animate-spin" aria-hidden />
+                                    Waiting for biometrics…
+                                </>
+                            ) : (
+                                <>
+                                    <Fingerprint className="w-4 h-4" aria-hidden />
+                                    Unlock with Face ID / Touch ID
+                                </>
+                            )}
                         </Button>
                     )}
 
-                    <form onSubmit={handlePinUnlock} className="space-y-3">
-                        <TextField
-                            label="Security PIN"
-                            trailingLabel={<Key className="w-3 h-3 text-surface-400" aria-hidden />}
-                            type="password"
-                            inputMode="numeric"
-                            autoComplete="current-password"
-                            maxLength={PIN_MAX_LENGTH}
-                            value={pin}
-                            onChange={e => setPin(e.target.value)}
-                            placeholder="••••••"
-                            autoFocus
-                            className="[&_input]:font-mono [&_input]:text-center [&_input]:tracking-widest"
-                        />
+                    {metadata.hasWebAuthn && !showPinForm && (
+                        <button
+                            type="button"
+                            onClick={() => setShowPinForm(true)}
+                            className="w-full text-center text-xs text-surface-400 hover:text-surface-200 py-2 cursor-pointer pressable"
+                        >
+                            Use PIN instead
+                        </button>
+                    )}
 
-                        <Button type="submit" fullWidth disabled={loading || !pin}>
-                            {loading ? (
-                                <>
-                                    <RefreshCw className="w-3.5 h-3.5 animate-spin" aria-hidden />
-                                    Unlocking…
-                                </>
-                            ) : (
-                                'Unlock'
+                    {(showPinForm || !metadata.hasWebAuthn) && (
+                        <form onSubmit={e => void handlePinUnlock(e)} className="space-y-3">
+                            {metadata.hasWebAuthn && (
+                                <div className="flex items-center gap-3 py-1">
+                                    <div className="flex-1 h-px bg-surface-700" />
+                                    <span className="text-[10px] uppercase tracking-wider text-surface-500 font-mono">
+                                        PIN backup
+                                    </span>
+                                    <div className="flex-1 h-px bg-surface-700" />
+                                </div>
                             )}
-                        </Button>
-                    </form>
+                            <TextField
+                                label="Security PIN"
+                                trailingLabel={<Key className="w-3 h-3 text-surface-400" aria-hidden />}
+                                type="password"
+                                inputMode="numeric"
+                                autoComplete="current-password"
+                                maxLength={PIN_MAX_LENGTH}
+                                value={pin}
+                                onChange={e => setPin(e.target.value)}
+                                placeholder="••••••"
+                                autoFocus={showPinForm && !preferBiometrics}
+                                className="[&_input]:font-mono [&_input]:text-center [&_input]:tracking-widest"
+                            />
+
+                            <Button type="submit" variant="secondary" fullWidth disabled={loading || !pin}>
+                                {loading && showPinForm ? (
+                                    <>
+                                        <RefreshCw className="w-3.5 h-3.5 animate-spin" aria-hidden />
+                                        Unlocking…
+                                    </>
+                                ) : (
+                                    'Unlock with PIN'
+                                )}
+                            </Button>
+                        </form>
+                    )}
                 </div>
 
                 <BiometricSimulator
@@ -172,6 +230,7 @@ export default function VaultUnlock({
                     actionType="assert"
                     fallbackToPin={() => {
                         setShowSimulator(false);
+                        setShowPinForm(true);
                     }}
                 />
             </motion.div>

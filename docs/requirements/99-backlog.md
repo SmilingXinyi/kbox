@@ -89,7 +89,7 @@
 
 **风险**：文件泄漏 + 弱导出密码
 
-- [ ] 未开始
+- [x] 已实现：`src/lib/vaultBackup.ts` + Settings 导出 / Setup 恢复；恢复 passphrase 包装 plaintext items + master key，恢复后设新 PIN（WebAuthn 需重新 enroll）
 
 ---
 

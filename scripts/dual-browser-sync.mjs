@@ -1,17 +1,23 @@
 /**
  * Dual-browser WebRTC vault sync smoke test.
  * Opens two isolated Chromium contexts (device A / device B),
- * pairs via PeerJS peer ID (manual join path), then runs both merge strategies.
+ * pairs via secure sync invite (manual join path), then runs both merge strategies.
  *
  * Timeouts are intentionally generous for PeerJS signaling / ICE on cold starts,
  * but every wait is tied to a concrete UI condition (no bare sleep).
  */
 import {chromium} from 'playwright';
+import {existsSync} from 'node:fs';
 import {mkdir} from 'node:fs/promises';
 import path from 'node:path';
 
 const BASE_URL = process.env.KBOX_URL ?? 'http://127.0.0.1:4173';
-const ARTIFACT_DIR = '/opt/cursor/artifacts/dual-browser-sync';
+/** Prefer Cursor CI artifacts dir; fall back to repo-local path for developer machines. */
+const ARTIFACT_DIR =
+    process.env.KBOX_SYNC_ARTIFACT_DIR ??
+    (existsSync('/opt/cursor/artifacts')
+        ? '/opt/cursor/artifacts/dual-browser-sync'
+        : path.join(process.cwd(), 'artifacts', 'dual-browser-sync'));
 const PIN = '123456';
 
 /** Centralized waits — override via env for slower CI without editing the script. */
@@ -75,27 +81,27 @@ async function openSync(page) {
 async function startHost(page) {
     await page.getByRole('button', {name: 'Enable sync service'}).click();
     await page.getByText('Waiting for the other device to scan').waitFor({timeout: TIMEOUT.peerReady});
-    const peerCode = page.locator('code').first();
-    // Peer ID is filled asynchronously after PeerJS `open`; wait until it is non-placeholder.
-    await peerCode.waitFor({timeout: TIMEOUT.peerReady});
+    const inviteCode = page.locator('code').first();
+    // Full invite (peer ID + session key) is filled after PeerJS `open`.
+    await inviteCode.waitFor({timeout: TIMEOUT.peerReady});
     await page.waitForFunction(
         el => {
             const text = (el.textContent ?? '').trim();
-            return text.length > 0 && text !== '…';
+            return text.startsWith('kbox-sync:') && text.includes('"sk"');
         },
-        await peerCode.elementHandle(),
+        await inviteCode.elementHandle(),
         {timeout: TIMEOUT.peerReady}
     );
-    const peerId = (await peerCode.textContent())?.trim();
-    if (!peerId || peerId === '…') {
-        throw new Error('Host peer ID not ready');
+    const invite = (await inviteCode.textContent())?.trim();
+    if (!invite || !invite.startsWith('kbox-sync:')) {
+        throw new Error('Host sync invite not ready');
     }
-    return peerId;
+    return invite;
 }
 
-async function joinAsGuest(page, peerId) {
+async function joinAsGuest(page, invite) {
     await page.getByRole('button', {name: 'Scan to join'}).click();
-    await page.getByPlaceholder('Peer ID from host QR').fill(peerId);
+    await page.getByPlaceholder('kbox-sync:{…} invite from host').fill(invite);
     await page.getByRole('button', {name: 'Connect'}).click();
 }
 
@@ -172,12 +178,12 @@ async function main() {
         await openSync(guestPage);
 
         console.log('--- Host enable service ---');
-        const peerId = await startHost(hostPage);
-        console.log(`peerId=${peerId}`);
+        const invite = await startHost(hostPage);
+        console.log(`inviteLen=${invite.length}`);
         await shot(hostPage, '05-host-qr-waiting');
 
-        console.log('--- Guest connect via peer ID ---');
-        await joinAsGuest(guestPage, peerId);
+        console.log('--- Guest connect via secure invite ---');
+        await joinAsGuest(guestPage, invite);
         await waitConnected(hostPage);
         await waitConnected(guestPage);
         await shot(hostPage, '06-host-connected');
@@ -206,9 +212,9 @@ async function main() {
         await addApiKey(guestPage, 'Guest-After-Sync', 'sk-guest-after');
         await openSync(hostPage);
         await openSync(guestPage);
-        const peerId2 = await startHost(hostPage);
-        console.log(`peerId2=${peerId2}`);
-        await joinAsGuest(guestPage, peerId2);
+        const invite2 = await startHost(hostPage);
+        console.log(`invite2Len=${invite2.length}`);
+        await joinAsGuest(guestPage, invite2);
         await waitConnected(hostPage);
         await waitConnected(guestPage);
 

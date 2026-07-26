@@ -12,9 +12,9 @@ No cloud account. Secrets are encrypted on-device (PIN + optional WebAuthn PRF).
 - **Encrypted at rest** — AES-GCM per secret; master key only in memory, cleared on lock
 - **Unlock** — PIN (PBKDF2 600k) or WebAuthn; browse labels/tags while locked
 - **Local storage** — IndexedDB (+ localStorage backup); no vault server
-- **Optional sync** — QR / peer ID → WebRTC after both devices confirm
+- **Optional sync** — QR invite (PeerJS id + session key) → WebRTC; vault payloads AES-GCM encrypted
 
-> Sync sends plaintext secrets over the data channel. Treat QR codes and peer IDs as sensitive. Review crypto before storing high-value credentials.
+> Sync invites carry a one-time session key. Treat the QR / invite string like a password. Vault items are encrypted with AES-GCM before leaving the device (in addition to WebRTC DTLS).
 
 ## Quick start
 
@@ -36,7 +36,7 @@ Open the Vite URL (usually `http://localhost:5173`). Production: `pnpm build` �
 | **Vault** | Setup (owner, PIN 4–12, optional WebAuthn), unlock, auto-lock, full reset |
 | **Keys**  | CRUD with unique label, tags, description, multi-line secrets             |
 | **Find**  | Search label / tag / description / secret; filter by tag                  |
-| **Sync**  | PeerJS + WebRTC; QR for peer discovery                                    |
+| **Sync**  | PeerJS + WebRTC; QR invite with AES-GCM session key                       |
 | **PWA**   | Installable; service worker caches static assets only                     |
 
 ## Security

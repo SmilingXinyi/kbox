@@ -4,10 +4,12 @@ import {
     ArrowUpFromLine,
     Camera,
     CheckCircle2,
+    Copy,
     Loader2,
     QrCode,
     Radio,
     RefreshCw,
+    Shield,
     Unplug
 } from 'lucide-react';
 import {Html5Qrcode} from 'html5-qrcode';
@@ -35,8 +37,9 @@ function isAbortLikeError(err: unknown): boolean {
 }
 
 export default function VaultSync({isOpen, onClose, sync, isUnlocked, onRequestUnlock}: VaultSyncProps) {
-    const [manualPeerId, setManualPeerId] = useState('');
+    const [manualInvite, setManualInvite] = useState('');
     const [scanError, setScanError] = useState<string | null>(null);
+    const [copiedInvite, setCopiedInvite] = useState(false);
     const scannerRef = useRef<Html5Qrcode | null>(null);
     const handledScanRef = useRef(false);
     /** Monotonic token so overlapping start/stop cycles ignore stale async completions. */
@@ -106,14 +109,28 @@ export default function VaultSync({isOpen, onClose, sync, isUnlocked, onRequestU
 
     const handleClose = () => {
         stopRef.current();
-        setManualPeerId('');
+        setManualInvite('');
         setScanError(null);
+        setCopiedInvite(false);
         onClose();
     };
 
     const handleStop = () => {
         setScanError(null);
+        setCopiedInvite(false);
         stopRef.current();
+    };
+
+    const handleCopyInvite = async () => {
+        if (!sync.inviteText) return;
+        try {
+            await navigator.clipboard.writeText(sync.inviteText);
+            setCopiedInvite(true);
+            window.setTimeout(() => setCopiedInvite(false), 2000);
+        } catch (e) {
+            console.error('Failed to copy invite:', e);
+            setScanError('Failed to copy invite. Select and copy it manually.');
+        }
     };
 
     useEffect(() => {
@@ -214,7 +231,7 @@ export default function VaultSync({isOpen, onClose, sync, isUnlocked, onRequestU
     const handleManualConnect = (e: React.FormEvent) => {
         e.preventDefault();
         if (!ensureUnlocked()) return;
-        const value = manualPeerId.trim();
+        const value = manualInvite.trim();
         if (!value) return;
         void sync.connectWithQrText(value);
     };
@@ -261,7 +278,7 @@ export default function VaultSync({isOpen, onClose, sync, isUnlocked, onRequestU
             isOpen={isOpen}
             onClose={handleClose}
             title="Device sync"
-            description="Peer-to-peer WebRTC transfer. Secrets stay on-device and move only over the encrypted data channel."
+            description="Peer-to-peer WebRTC transfer with app-layer AES-GCM. The QR invite carries a one-time session key — vault secrets are never sent in plaintext."
         >
             {!isUnlocked && (
                 <Alert
@@ -321,7 +338,7 @@ export default function VaultSync({isOpen, onClose, sync, isUnlocked, onRequestU
                         <span>
                             <span className="block text-sm text-surface-100">Enable sync service</span>
                             <span className="block text-[11px] text-surface-400 mt-0.5">
-                                Show a QR code for the other device to scan (device A)
+                                Show a secure QR invite for the other device (device A)
                             </span>
                         </span>
                     </button>
@@ -337,7 +354,7 @@ export default function VaultSync({isOpen, onClose, sync, isUnlocked, onRequestU
                         <span>
                             <span className="block text-sm text-surface-100">Scan to join</span>
                             <span className="block text-[11px] text-surface-400 mt-0.5">
-                                Scan the host QR code on this device (device B)
+                                Scan or paste the host invite on this device (device B)
                             </span>
                         </span>
                     </button>
@@ -358,12 +375,28 @@ export default function VaultSync({isOpen, onClose, sync, isUnlocked, onRequestU
                                 <Loader2 className="w-6 h-6 text-accent animate-spin" />
                             </div>
                         )}
-                        <p className="text-[11px] text-surface-400 text-center">
-                            Scan with the other device running kbox. Peer ID:
+                        <p className="text-[11px] text-surface-400 text-center leading-relaxed">
+                            Scan with the other device running kbox. The invite includes a one-time encryption key —
+                            treat it like a password.
                         </p>
-                        <code className="text-[10px] font-mono text-accent break-all text-center">
-                            {sync.peerId ?? '…'}
+                        {sync.pairingCode && (
+                            <p className="text-[11px] text-surface-300 font-mono">
+                                Pairing code: <span className="text-accent">{sync.pairingCode}</span>
+                            </p>
+                        )}
+                        <code className="text-[10px] font-mono text-surface-400 break-all text-center max-h-20 overflow-y-auto overscroll-y-contain w-full">
+                            {sync.inviteText ?? '…'}
                         </code>
+                        <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            disabled={!sync.inviteText}
+                            onClick={() => void handleCopyInvite()}
+                        >
+                            <Copy className="w-3.5 h-3.5" aria-hidden />
+                            {copiedInvite ? 'Copied' : 'Copy invite'}
+                        </Button>
                     </div>
                     <Button variant="secondary" fullWidth onClick={handleStop}>
                         <Unplug className="w-4 h-4" aria-hidden />
@@ -379,16 +412,16 @@ export default function VaultSync({isOpen, onClose, sync, isUnlocked, onRequestU
                         className="overflow-hidden rounded-xl border border-surface-700 bg-surface-950 min-h-[220px]"
                     />
                     <form onSubmit={handleManualConnect} className="space-y-2">
-                        <label className="block text-[11px] text-surface-400">Or paste peer ID manually</label>
+                        <label className="block text-[11px] text-surface-400">Or paste the full host invite</label>
                         <div className="flex flex-col sm:flex-row gap-2">
                             <input
                                 type="text"
-                                value={manualPeerId}
-                                onChange={e => setManualPeerId(e.target.value)}
-                                placeholder="Peer ID from host QR"
+                                value={manualInvite}
+                                onChange={e => setManualInvite(e.target.value)}
+                                placeholder="kbox-sync:{…} invite from host"
                                 className="flex-1 min-h-11 px-3 py-2 bg-surface-950 border border-surface-700 rounded-lg text-xs font-mono text-surface-100 placeholder:text-surface-500 focus:outline-none focus:border-accent transition"
                             />
-                            <Button type="submit" disabled={!manualPeerId.trim()} className="sm:w-auto">
+                            <Button type="submit" disabled={!manualInvite.trim()} className="sm:w-auto">
                                 Connect
                             </Button>
                         </div>
@@ -426,6 +459,17 @@ export default function VaultSync({isOpen, onClose, sync, isUnlocked, onRequestU
                             </p>
                         </div>
                     </div>
+
+                    {sync.pairingCode && sync.isConnected && (
+                        <div className="flex items-start gap-2 p-3 rounded-lg border border-accent/30 bg-accent-muted text-[11px] text-surface-200 leading-relaxed">
+                            <Shield className="w-3.5 h-3.5 text-accent shrink-0 mt-0.5" aria-hidden />
+                            <span>
+                                Confirm both devices show the same pairing code:{' '}
+                                <span className="font-mono text-accent">{sync.pairingCode}</span>. If they differ,
+                                disconnect and start over.
+                            </span>
+                        </div>
+                    )}
 
                     {sync.sessionState === 'synced' && (
                         <Alert tone="success">
@@ -473,7 +517,7 @@ export default function VaultSync({isOpen, onClose, sync, isUnlocked, onRequestU
                             <Alert tone="warn">
                                 {sync.pendingIncoming.strategy === 'a-overwrites-b'
                                     ? `The host wants to replace THIS vault with theirs (${sync.pendingIncoming.items.length} key${sync.pendingIncoming.items.length === 1 ? '' : 's'}). Your local keys will be deleted.`
-                                    : 'The host wants to pull THIS vault onto their device. Your secrets will be sent over the linked channel.'}
+                                    : 'The host wants to pull THIS vault onto their device. Your secrets will be sent in an encrypted envelope over the linked channel.'}
                             </Alert>
                             <div className="flex flex-col-reverse sm:flex-row gap-2">
                                 <Button variant="secondary" fullWidth onClick={() => sync.rejectIncomingSync()}>
@@ -504,7 +548,7 @@ export default function VaultSync({isOpen, onClose, sync, isUnlocked, onRequestU
                     {sync.sessionState === 'syncing' && (
                         <div className="flex items-center justify-center gap-2 py-2 text-xs text-surface-300">
                             <RefreshCw className="w-3.5 h-3.5 animate-spin text-accent" aria-hidden />
-                            Transferring encrypted channel payload…
+                            Transferring AES-GCM encrypted vault…
                         </div>
                     )}
 

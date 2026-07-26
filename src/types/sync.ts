@@ -26,16 +26,28 @@ export type SyncPeerSummary = {
     itemCount: number;
 };
 
+/**
+ * QR / invite payload (v2).
+ * `sk` is a one-time AES-GCM session key — possession authenticates the pair and encrypts vault data.
+ */
 export type SyncQrPayload = {
-    v: 1;
+    v: 2;
     app: 'kbox';
     peerId: string;
+    /** 32-byte hex session key for app-layer vault encryption. */
+    sk: string;
+};
+
+/** AES-GCM envelope for vault items on the wire (never plaintext secrets). */
+export type SyncEncryptedEnvelope = {
+    iv: string;
+    ciphertext: string;
 };
 
 export type SyncWireMessage =
-    | {type: 'hello'; role: SyncRole; itemCount: number}
-    | {type: 'sync-request'; strategy: SyncStrategy; items?: ApiKeyItem[]}
-    | {type: 'sync-data'; items: ApiKeyItem[]}
+    | {type: 'hello'; role: SyncRole; itemCount: number; keyConfirm: string}
+    | {type: 'sync-request'; strategy: SyncStrategy; envelope?: SyncEncryptedEnvelope}
+    | {type: 'sync-data'; envelope: SyncEncryptedEnvelope}
     | {type: 'sync-complete'; itemCount: number}
     | {type: 'sync-reject'; reason: string}
     | {type: 'error'; message: string};

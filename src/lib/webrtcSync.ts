@@ -1,16 +1,18 @@
 import {Peer, type DataConnection} from 'peerjs';
-import type {ApiKeyItem} from '../types/vault';
-import type {SyncPeerSummary, SyncRole, SyncStrategy, SyncWireMessage} from '../types/sync';
+import type {SyncEncryptedEnvelope, SyncPeerSummary, SyncRole, SyncStrategy, SyncWireMessage} from '../types/sync';
+import {isSyncEncryptedEnvelope} from './syncCrypto';
 
 export type WebRtcSyncEvents = {
     onPeerId?: (peerId: string) => void;
     onStateChange?: (state: 'starting' | 'waiting' | 'connecting' | 'connected' | 'closed' | 'error') => void;
     onRemoteSummary?: (summary: SyncPeerSummary) => void;
-    onIncomingSyncRequest?: (strategy: SyncStrategy, items: ApiKeyItem[] | undefined) => void;
-    onIncomingSyncData?: (items: ApiKeyItem[]) => void;
+    onIncomingSyncRequest?: (strategy: SyncStrategy, envelope: SyncEncryptedEnvelope | undefined) => void;
+    onIncomingSyncData?: (envelope: SyncEncryptedEnvelope) => void;
     onSyncComplete?: (itemCount: number) => void;
     onSyncRejected?: (reason: string) => void;
     onError?: (message: string) => void;
+    /** Called when peer hello keyConfirm does not match the local pairing fingerprint. */
+    onKeyMismatch?: () => void;
 };
 
 function isWireMessage(value: unknown): value is SyncWireMessage {
@@ -37,11 +39,14 @@ export class WebRtcSyncSession {
     private conn: DataConnection | null = null;
     private destroyed = false;
     private localItemCount = 0;
+    private keyConfirmMatched = false;
     private readonly role: SyncRole;
+    private readonly keyConfirm: string;
     private readonly events: WebRtcSyncEvents;
 
-    constructor(role: SyncRole, events: WebRtcSyncEvents = {}) {
+    constructor(role: SyncRole, keyConfirm: string, events: WebRtcSyncEvents = {}) {
         this.role = role;
+        this.keyConfirm = keyConfirm;
         this.events = events;
     }
 
@@ -124,12 +129,20 @@ export class WebRtcSyncSession {
         }
     }
 
-    sendSyncRequest(strategy: SyncStrategy, items?: ApiKeyItem[]): void {
-        this.send({type: 'sync-request', strategy, items});
+    sendSyncRequest(strategy: SyncStrategy, envelope?: SyncEncryptedEnvelope): void {
+        if (!this.keyConfirmMatched) {
+            this.events.onError?.('Pairing not confirmed yet.');
+            return;
+        }
+        this.send({type: 'sync-request', strategy, envelope});
     }
 
-    sendSyncData(items: ApiKeyItem[]): void {
-        this.send({type: 'sync-data', items});
+    sendSyncData(envelope: SyncEncryptedEnvelope): void {
+        if (!this.keyConfirmMatched) {
+            this.events.onError?.('Pairing not confirmed yet.');
+            return;
+        }
+        this.send({type: 'sync-data', envelope});
     }
 
     sendSyncComplete(itemCount: number): void {
@@ -150,7 +163,6 @@ export class WebRtcSyncSession {
         try {
             this.peer?.destroy();
         } catch (err) {
-            // Teardown should still finish; surface the failure without leaving the session hanging.
             console.warn('Failed to destroy PeerJS peer:', err);
             this.events.onError?.(errorMessage(err, 'Failed to destroy WebRTC peer.'));
         }
@@ -181,20 +193,21 @@ export class WebRtcSyncSession {
         this.conn = conn;
         this.events.onStateChange?.('connecting');
 
-        const markConnectedAndHello = () => {
+        const sendHello = () => {
             if (this.destroyed) return;
-            this.events.onStateChange?.('connected');
+            // Stay in "connecting" until the peer hello proves matching session keys.
             this.send({
                 type: 'hello',
                 role: this.role,
-                itemCount: this.localItemCount
+                itemCount: this.localItemCount,
+                keyConfirm: this.keyConfirm
             });
         };
 
         if (conn.open) {
-            markConnectedAndHello();
+            sendHello();
         } else {
-            conn.on('open', markConnectedAndHello);
+            conn.on('open', sendHello);
         }
 
         conn.on('data', raw => {
@@ -223,14 +236,44 @@ export class WebRtcSyncSession {
 
     private handleMessage(message: SyncWireMessage): void {
         switch (message.type) {
-            case 'hello':
+            case 'hello': {
+                if (typeof message.keyConfirm !== 'string' || message.keyConfirm !== this.keyConfirm) {
+                    this.events.onKeyMismatch?.();
+                    this.events.onError?.(
+                        'Pairing key mismatch. Rescan the host QR / paste the full invite (not just the peer ID).'
+                    );
+                    this.send({type: 'error', message: 'Pairing key mismatch.'});
+                    this.safeCloseConnection(this.conn, 'Closed after pairing key mismatch');
+                    this.conn = null;
+                    this.events.onStateChange?.('error');
+                    return;
+                }
+                this.keyConfirmMatched = true;
                 this.events.onRemoteSummary?.({role: message.role, itemCount: message.itemCount});
+                this.events.onStateChange?.('connected');
                 break;
+            }
             case 'sync-request':
-                this.events.onIncomingSyncRequest?.(message.strategy, message.items);
+                if (!this.keyConfirmMatched) {
+                    this.events.onError?.('Received sync before pairing confirmation.');
+                    return;
+                }
+                if (message.envelope !== undefined && !isSyncEncryptedEnvelope(message.envelope)) {
+                    this.events.onError?.('Received invalid encrypted sync envelope.');
+                    return;
+                }
+                this.events.onIncomingSyncRequest?.(message.strategy, message.envelope);
                 break;
             case 'sync-data':
-                this.events.onIncomingSyncData?.(message.items);
+                if (!this.keyConfirmMatched) {
+                    this.events.onError?.('Received sync before pairing confirmation.');
+                    return;
+                }
+                if (!isSyncEncryptedEnvelope(message.envelope)) {
+                    this.events.onError?.('Received invalid encrypted sync envelope.');
+                    return;
+                }
+                this.events.onIncomingSyncData?.(message.envelope);
                 break;
             case 'sync-complete':
                 this.events.onSyncComplete?.(message.itemCount);

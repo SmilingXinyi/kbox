@@ -2,10 +2,15 @@ import QRCode from 'qrcode';
 import type {SyncQrPayload} from '../types/sync';
 
 const QR_PREFIX = 'kbox-sync:';
+const SESSION_KEY_HEX_RE = /^[0-9a-f]{64}$/i;
 
-export function encodeSyncQrPayload(peerId: string): string {
-    const payload: SyncQrPayload = {v: 1, app: 'kbox', peerId};
+export function encodeSyncQrPayload(peerId: string, sessionKeyHex: string): string {
+    const payload: SyncQrPayload = {v: 2, app: 'kbox', peerId, sk: sessionKeyHex.toLowerCase()};
     return `${QR_PREFIX}${JSON.stringify(payload)}`;
+}
+
+function isValidSessionKey(sk: unknown): sk is string {
+    return typeof sk === 'string' && SESSION_KEY_HEX_RE.test(sk);
 }
 
 export function parseSyncQrPayload(raw: string): SyncQrPayload | null {
@@ -28,22 +33,25 @@ export function parseSyncQrPayload(raw: string): SyncQrPayload | null {
 
     try {
         const parsed = JSON.parse(jsonText) as Partial<SyncQrPayload>;
-        if (parsed.v === 1 && parsed.app === 'kbox' && typeof parsed.peerId === 'string' && parsed.peerId.length > 0) {
-            return {v: 1, app: 'kbox', peerId: parsed.peerId};
+        if (
+            parsed.v === 2 &&
+            parsed.app === 'kbox' &&
+            typeof parsed.peerId === 'string' &&
+            parsed.peerId.length > 0 &&
+            isValidSessionKey(parsed.sk)
+        ) {
+            return {v: 2, app: 'kbox', peerId: parsed.peerId, sk: parsed.sk.toLowerCase()};
         }
     } catch {
-        // Fall through — allow bare peer IDs from PeerJS.
+        // Fall through.
     }
 
-    if (/^[a-zA-Z0-9_-]{5,64}$/.test(trimmed)) {
-        return {v: 1, app: 'kbox', peerId: trimmed};
-    }
-
+    // Bare PeerJS ids are intentionally rejected — they cannot carry the session key.
     return null;
 }
 
-export async function renderSyncQrDataUrl(peerId: string): Promise<string> {
-    const text = encodeSyncQrPayload(peerId);
+export async function renderSyncQrDataUrl(peerId: string, sessionKeyHex: string): Promise<string> {
+    const text = encodeSyncQrPayload(peerId, sessionKeyHex);
     return QRCode.toDataURL(text, {
         errorCorrectionLevel: 'M',
         margin: 2,

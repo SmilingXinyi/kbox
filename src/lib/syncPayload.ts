@@ -16,7 +16,7 @@ function isOptionalString(value: unknown, maxLen: number): boolean {
     return value === undefined || value === null || (typeof value === 'string' && value.length <= maxLen);
 }
 
-/** Prepare unlocked vault items for P2P transfer (plaintext secrets only). */
+/** Prepare unlocked vault items before AES-GCM envelope encryption for P2P sync. */
 export function toSyncPayload(items: ApiKeyItem[]): ApiKeyItem[] {
     return items.map(item => {
         // Omit undefined optionals so PeerJS BinaryPack does not revive them as empty objects

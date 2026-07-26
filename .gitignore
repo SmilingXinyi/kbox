@@ -27,3 +27,6 @@ dist-ssr
 cypress/videos
 cypress/screenshots
 cypress/downloads
+
+# Local dual-browser sync smoke artifacts
+artifacts/

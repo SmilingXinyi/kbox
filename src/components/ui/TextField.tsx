@@ -17,8 +17,9 @@ type TextAreaFieldProps = SharedFieldProps &
         multiline: true;
     };
 
+/* text-base (16px) avoids iOS Safari auto-zoom on focus */
 const CONTROL =
-    'w-full min-h-11 px-3 py-2.5 bg-surface-950 border border-surface-700 rounded-lg text-sm text-surface-100 placeholder:text-surface-600 focus:outline-none focus:border-accent transition';
+    'w-full min-h-11 px-3 py-2.5 bg-surface-950 border border-surface-700 rounded-lg text-base sm:text-sm text-surface-100 placeholder:text-surface-600 focus:outline-none focus:border-accent transition';
 
 export default function TextField(props: TextFieldProps | TextAreaFieldProps) {
     const {label, hint, trailingLabel, className = '', multiline, ...rest} = props;

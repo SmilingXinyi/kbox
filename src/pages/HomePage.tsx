@@ -87,7 +87,7 @@ export default function HomePage() {
     const showDashboard = vault.vaultState === 'unlocked';
 
     return (
-        <div className="min-h-dvh bg-surface-950 text-surface-100 flex flex-col font-sans antialiased relative">
+        <div className="h-dvh max-h-dvh overflow-hidden bg-surface-950 text-surface-100 flex flex-col font-sans antialiased relative overscroll-none">
             <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden" aria-hidden>
                 <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_color-mix(in_srgb,var(--color-accent)_8%,transparent),_transparent_55%)]" />
                 <div
@@ -100,7 +100,7 @@ export default function HomePage() {
                 />
             </div>
 
-            <div className="relative z-10 flex-1 flex flex-col">
+            <div className="relative z-10 flex-1 flex flex-col min-h-0 overflow-hidden">
                 <AnimatePresence mode="wait">
                     {vault.vaultState === 'loading' && (
                         <motion.div
@@ -116,8 +116,14 @@ export default function HomePage() {
                     )}
 
                     {vault.vaultState === 'uninitialized' && (
-                        <motion.div key="setup" initial={{opacity: 0}} animate={{opacity: 1}} exit={{opacity: 0}}>
-                            <VaultSetup onInitialized={vault.completeSetup} />
+                        <motion.div
+                            key="setup"
+                            initial={{opacity: 0}}
+                            animate={{opacity: 1}}
+                            exit={{opacity: 0}}
+                            className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain"
+                        >
+                            <VaultSetup onInitialized={vault.completeSetup} onRestored={vault.restoreFromBackup} />
                         </motion.div>
                     )}
 
@@ -127,7 +133,7 @@ export default function HomePage() {
                             initial={{opacity: 0}}
                             animate={{opacity: 1}}
                             exit={{opacity: 0}}
-                            className="flex-1 flex flex-col pb-24 sm:pb-0"
+                            className="flex-1 flex flex-col min-h-0 pb-24 sm:pb-0"
                         >
                             <VaultHeader
                                 isUnlocked={!!vault.masterKey}
@@ -140,7 +146,7 @@ export default function HomePage() {
                                 onAdd={openAddForm}
                             />
 
-                            <main className="flex-1 max-w-5xl w-full mx-auto px-4 py-5 sm:py-6 space-y-4 sm:space-y-5">
+                            <main className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain max-w-5xl w-full mx-auto px-4 py-5 sm:py-6 space-y-4 sm:space-y-5">
                                 {vault.error && (
                                     <Alert
                                         tone="error"
@@ -169,7 +175,7 @@ export default function HomePage() {
                                         onChange={e => setSearchQuery(e.target.value)}
                                         placeholder="Search labels, tags, descriptions…"
                                         aria-label="Search vault"
-                                        className="w-full min-h-11 pl-9 pr-3 py-2.5 bg-surface-900 border border-surface-700 rounded-lg text-sm text-surface-100 placeholder:text-surface-500 focus:outline-none focus:border-accent transition"
+                                        className="w-full min-h-11 pl-9 pr-3 py-2.5 bg-surface-900 border border-surface-700 rounded-lg text-base sm:text-sm text-surface-100 placeholder:text-surface-500 focus:outline-none focus:border-accent transition"
                                     />
                                 </div>
 
@@ -269,6 +275,11 @@ export default function HomePage() {
                 commonTags={vault.commonTags}
                 onCommonTagsChange={vault.setCommonTags}
                 metadata={vault.metadata}
+                masterKey={vault.masterKey}
+                items={vault.items}
+                onRequestUnlock={() => {
+                    vault.setShowUnlockModal(true);
+                }}
                 onReset={vault.resetVault}
             />
 

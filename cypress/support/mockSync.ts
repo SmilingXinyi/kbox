@@ -14,6 +14,8 @@ export function createMockSync(overrides: MockSyncOverrides = {}): UseWebRTCSync
         sessionState,
         role: overrides.role ?? null,
         peerId: overrides.peerId ?? null,
+        inviteText: overrides.inviteText ?? null,
+        pairingCode: overrides.pairingCode ?? null,
         qrDataUrl: overrides.qrDataUrl ?? null,
         remote: overrides.remote ?? null,
         error: overrides.error ?? null,

@@ -29,10 +29,13 @@ describe('<VaultSync />', () => {
     });
 
     it('shows QR while host is waiting', () => {
+        const invite = 'kbox-sync:{"v":2,"app":"kbox","peerId":"hostPeer123456","sk":"' + 'a'.repeat(64) + '"}';
         const sync = createMockSync({
             sessionState: 'waiting',
             role: 'host',
             peerId: 'hostPeer123456',
+            inviteText: invite,
+            pairingCode: 'abcd1234',
             qrDataUrl:
                 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
         });
@@ -42,6 +45,8 @@ describe('<VaultSync />', () => {
         cy.contains('Waiting for the other device to scan').should('be.visible');
         cy.get('img[alt="Sync QR code"]').should('be.visible');
         cy.contains('hostPeer123456').should('be.visible');
+        cy.contains('abcd1234').should('be.visible');
+        cy.contains('button', 'Copy invite').should('be.visible');
     });
 
     it('shows connected status and merge strategies for host', () => {

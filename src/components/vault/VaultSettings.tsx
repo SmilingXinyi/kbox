@@ -1,9 +1,10 @@
 import {useState} from 'react';
 import {Fingerprint, Tag, Timer, X} from 'lucide-react';
-import type {LockBehavior, VaultMetadata} from '../../types/vault';
+import type {ApiKeyItem, LockBehavior, VaultMetadata} from '../../types/vault';
 import Modal from '../ui/Modal';
 import Button from '../ui/Button';
 import Alert from '../ui/Alert';
+import {VaultBackupExport} from './VaultBackup';
 
 type VaultSettingsProps = {
     isOpen: boolean;
@@ -13,6 +14,9 @@ type VaultSettingsProps = {
     commonTags: string[];
     onCommonTagsChange: (tags: string[]) => void;
     metadata: VaultMetadata | null;
+    masterKey: string | null;
+    items: ApiKeyItem[];
+    onRequestUnlock: () => void;
     onReset: () => Promise<void>;
 };
 
@@ -32,6 +36,9 @@ export default function VaultSettings({
     commonTags,
     onCommonTagsChange,
     metadata,
+    masterKey,
+    items,
+    onRequestUnlock,
     onReset
 }: VaultSettingsProps) {
     const [newTag, setNewTag] = useState('');
@@ -49,6 +56,24 @@ export default function VaultSettings({
 
     return (
         <Modal isOpen={isOpen} onClose={onClose} title="Settings">
+            {masterKey ? (
+                <VaultBackupExport
+                    masterKeyHex={masterKey}
+                    items={items}
+                    lockBehavior={lockBehavior}
+                    commonTags={commonTags}
+                />
+            ) : (
+                <section className="space-y-3 mb-6">
+                    <Alert tone="info">
+                        Unlock the vault to export an encrypted recovery file for account recovery.
+                    </Alert>
+                    <Button variant="secondary" fullWidth onClick={onRequestUnlock}>
+                        Unlock to export recovery file
+                    </Button>
+                </section>
+            )}
+
             <section className="space-y-3 mb-6">
                 <div className="flex items-center gap-2 text-sm font-medium text-surface-100">
                     <Timer className="w-4 h-4 text-accent" aria-hidden />
@@ -126,7 +151,7 @@ export default function VaultSettings({
                         value={newTag}
                         onChange={e => setNewTag(e.target.value)}
                         placeholder="Add new tag…"
-                        className="flex-1 min-h-11 px-3 py-2 bg-surface-950 border border-surface-700 rounded-lg text-sm text-surface-100 placeholder:text-surface-500 focus:outline-none focus:border-accent transition"
+                        className="flex-1 min-h-11 px-3 py-2 bg-surface-950 border border-surface-700 rounded-lg text-base sm:text-sm text-surface-100 placeholder:text-surface-500 focus:outline-none focus:border-accent transition"
                     />
                     <Button
                         type="submit"

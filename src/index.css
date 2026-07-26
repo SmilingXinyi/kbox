@@ -38,19 +38,38 @@
 
 html {
     color-scheme: dark;
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    touch-action: manipulation;
 }
 
 body {
     margin: 0;
+    height: 100%;
     min-height: 100dvh;
+    max-height: 100dvh;
+    overflow: hidden;
+    overscroll-behavior: none;
     font-family: var(--font-sans);
     background-color: var(--color-surface-950);
     color: var(--color-surface-100);
     -webkit-font-smoothing: antialiased;
+    /* Prevent iOS rubber-band scrolling the document behind the app shell. */
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    touch-action: manipulation;
 }
 
 #root {
+    height: 100%;
     min-height: 100dvh;
+    max-height: 100dvh;
+    overflow: hidden;
+    overscroll-behavior: none;
 }
 
 :focus-visible {

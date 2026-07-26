@@ -111,6 +111,20 @@ export function useVault() {
         setError(null);
     };
 
+    /** Restore from an encrypted recovery file (new PIN metadata + plaintext items). */
+    const restoreFromBackup = async (masterKeyHex: string, meta: VaultMetadata, plainItems: ApiKeyItem[]) => {
+        saveVaultMetadata(meta);
+        setMetadata(meta);
+        setMasterKey(masterKeyHex);
+        await persistItems(plainItems, masterKeyHex);
+        setVaultState('unlocked');
+        setError(null);
+        setRevealedKeys({});
+        setCopiedKeyId(null);
+        setPendingAction(null);
+        setShowUnlockModal(false);
+    };
+
     const lock = async () => {
         setMasterKey(null);
         setRevealedKeys({});
@@ -399,6 +413,7 @@ export function useVault() {
         commonTags,
         setCommonTags,
         completeSetup,
+        restoreFromBackup,
         unlockWithPin,
         unlockWithWebAuthn,
         lock,
