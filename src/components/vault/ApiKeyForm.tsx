@@ -174,7 +174,7 @@ function ApiKeyFormFields({onClose, onSave, existingItems, commonTags, editItem}
                                 value={keyEntry.label}
                                 onChange={e => handleKeyFieldChange(keyEntry.id, 'label', e.target.value)}
                                 placeholder="Key label"
-                                className="flex-1 min-h-11 px-2.5 py-2 bg-surface-900 border border-surface-700 rounded-md text-xs text-surface-100 focus:outline-none focus:border-accent"
+                                className="flex-1 min-h-11 px-2.5 py-2 bg-surface-900 border border-surface-700 rounded-md text-base text-surface-100 focus:outline-none focus:border-accent"
                             />
                             {keys.length > 1 && (
                                 <button
@@ -192,7 +192,7 @@ function ApiKeyFormFields({onClose, onSave, existingItems, commonTags, editItem}
                             value={keyEntry.value}
                             onChange={e => handleKeyFieldChange(keyEntry.id, 'value', e.target.value)}
                             placeholder="Secret value"
-                            className="w-full min-h-11 px-2.5 py-2 bg-surface-900 border border-surface-700 rounded-md text-xs font-mono text-surface-100 focus:outline-none focus:border-accent"
+                            className="w-full min-h-11 px-2.5 py-2 bg-surface-900 border border-surface-700 rounded-md text-base font-mono text-surface-100 focus:outline-none focus:border-accent"
                         />
                     </div>
                 ))}

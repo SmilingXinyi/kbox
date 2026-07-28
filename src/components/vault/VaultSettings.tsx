@@ -151,7 +151,7 @@ export default function VaultSettings({
                         value={newTag}
                         onChange={e => setNewTag(e.target.value)}
                         placeholder="Add new tag…"
-                        className="flex-1 min-h-11 px-3 py-2 bg-surface-950 border border-surface-700 rounded-lg text-base sm:text-sm text-surface-100 placeholder:text-surface-500 focus:outline-none focus:border-accent transition"
+                        className="flex-1 min-h-11 px-3 py-2 bg-surface-950 border border-surface-700 rounded-lg text-base text-surface-100 placeholder:text-surface-500 focus:outline-none focus:border-accent transition"
                     />
                     <Button
                         type="submit"
