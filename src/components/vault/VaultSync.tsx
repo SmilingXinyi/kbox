@@ -419,7 +419,7 @@ export default function VaultSync({isOpen, onClose, sync, isUnlocked, onRequestU
                                 value={manualInvite}
                                 onChange={e => setManualInvite(e.target.value)}
                                 placeholder="kbox-sync:{…} invite from host"
-                                className="flex-1 min-h-11 px-3 py-2 bg-surface-950 border border-surface-700 rounded-lg text-xs font-mono text-surface-100 placeholder:text-surface-500 focus:outline-none focus:border-accent transition"
+                                className="flex-1 min-h-11 px-3 py-2 bg-surface-950 border border-surface-700 rounded-lg text-base font-mono text-surface-100 placeholder:text-surface-500 focus:outline-none focus:border-accent transition"
                             />
                             <Button type="submit" disabled={!manualInvite.trim()} className="sm:w-auto">
                                 Connect

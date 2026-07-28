@@ -175,7 +175,7 @@ export default function HomePage() {
                                         onChange={e => setSearchQuery(e.target.value)}
                                         placeholder="Search labels, tags, descriptions…"
                                         aria-label="Search vault"
-                                        className="w-full min-h-11 pl-9 pr-3 py-2.5 bg-surface-900 border border-surface-700 rounded-lg text-base sm:text-sm text-surface-100 placeholder:text-surface-500 focus:outline-none focus:border-accent transition"
+                                        className="w-full min-h-11 pl-9 pr-3 py-2.5 bg-surface-900 border border-surface-700 rounded-lg text-base text-surface-100 placeholder:text-surface-500 focus:outline-none focus:border-accent transition"
                                     />
                                 </div>
 
