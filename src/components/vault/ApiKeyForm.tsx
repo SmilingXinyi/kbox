@@ -85,11 +85,6 @@ function ApiKeyFormFields({onClose, onSave, existingItems, commonTags, editItem}
             return;
         }
 
-        if (keys.some(k => !k.label.trim() || !k.value.trim())) {
-            setError('Each key row needs a label and a value.');
-            return;
-        }
-
         const now = new Date().toISOString();
         const item: ApiKeyItem = {
             id: editItem?.id ?? crypto.randomUUID(),
