@@ -28,7 +28,14 @@ export default function VaultHeader({
             <div className="h-0.5 hazard-stripe" aria-hidden />
             <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
                 <div className="min-w-0">
-                    <img src="/kbox.svg" alt="kbox" className="h-5 w-auto" width={31} height={9} decoding="async" />
+                    <img
+                        src={`${import.meta.env.BASE_URL}kbox.svg`}
+                        alt="kbox"
+                        className="h-5 w-auto"
+                        width={31}
+                        height={9}
+                        decoding="async"
+                    />
                     <p className="text-[11px] text-surface-400 mt-1.5 truncate">
                         {isUnlocked
                             ? 'Vault unlocked'

@@ -27,9 +27,9 @@ function formatDate(isoStr: string): string {
 
 function maskValue(value: string): string {
     if (value.length > 12) {
-        return `${value.slice(0, 4)}••••••••${value.slice(-4)}`;
+        return `${value.slice(0, 4)} · · · · ${value.slice(-4)}`;
     }
-    return '••••••••••••••••';
+    return '•••• · · · · ••••';
 }
 
 export default function ApiKeyCard({
@@ -103,19 +103,28 @@ export default function ApiKeyCard({
                     const isRevealed = !!revealedKeys[keyEntry.id];
                     const isCopied = copiedKeyId === keyEntry.id;
 
+                    const showPlain = isRevealed && isUnlocked && !!keyEntry.value;
+
                     return (
                         <div
                             key={keyEntry.id}
-                            className="p-2.5 bg-surface-950 rounded-lg border border-surface-700/70 space-y-1.5"
+                            className="bg-surface-950 rounded-lg border border-surface-700/70 overflow-hidden"
                         >
-                            <div className="flex items-center justify-between text-[10px] font-medium text-surface-400">
-                                <span className="tracking-wide uppercase font-mono text-[9px]">{keyEntry.label}</span>
-                                <div className="flex items-center gap-0.5">
+                            <div className="flex items-center justify-between gap-2 px-2.5 pt-2 pb-1.5">
+                                <span className="min-w-0 truncate tracking-[0.08em] uppercase font-mono text-[10px] text-surface-400">
+                                    {keyEntry.label}
+                                </span>
+                                <div className="flex items-center gap-0.5 shrink-0 text-surface-400">
                                     <button
                                         type="button"
                                         onClick={() => onToggleReveal(item.id, keyEntry.id)}
-                                        className="p-2 min-h-9 min-w-9 inline-flex items-center justify-center hover:text-surface-100 transition cursor-pointer pressable"
+                                        className={`p-2 min-h-9 min-w-9 inline-flex items-center justify-center rounded-md transition cursor-pointer pressable ${
+                                            showPlain
+                                                ? 'text-accent hover:bg-accent-muted'
+                                                : 'hover:text-surface-100 hover:bg-surface-800'
+                                        }`}
                                         aria-label={isRevealed ? 'Hide secret' : 'Reveal secret'}
+                                        aria-pressed={showPlain}
                                     >
                                         {isRevealed ? (
                                             <EyeOff className="w-3.5 h-3.5" />
@@ -126,8 +135,10 @@ export default function ApiKeyCard({
                                     <button
                                         type="button"
                                         onClick={() => onCopyKey(item.id, keyEntry.id)}
-                                        className={`p-2 min-h-9 min-w-9 inline-flex items-center justify-center transition cursor-pointer pressable ${
-                                            isCopied ? 'text-accent' : 'hover:text-surface-100'
+                                        className={`p-2 min-h-9 min-w-9 inline-flex items-center justify-center rounded-md transition cursor-pointer pressable ${
+                                            isCopied
+                                                ? 'text-accent bg-accent-muted'
+                                                : 'hover:text-surface-100 hover:bg-surface-800'
                                         }`}
                                         aria-label="Copy secret"
                                     >
@@ -140,16 +151,43 @@ export default function ApiKeyCard({
                                 </div>
                             </div>
 
-                            <div className="font-mono text-xs text-surface-100 break-all flex items-center flex-wrap gap-1.5">
-                                {isRevealed && isUnlocked && keyEntry.value ? (
-                                    <span>{keyEntry.value}</span>
+                            <div
+                                className={`relative mx-2 mb-2 rounded-md px-2.5 py-2 transition-colors duration-150 ${
+                                    showPlain
+                                        ? 'bg-surface-900/80 border border-accent/20'
+                                        : 'bg-surface-900/40 border border-transparent'
+                                }`}
+                            >
+                                {showPlain ? (
+                                    <p
+                                        className={[
+                                            'font-mono text-[12px] sm:text-[13px] leading-[1.65]',
+                                            'tracking-[0.02em] text-surface-100',
+                                            'break-all [overflow-wrap:anywhere]',
+                                            'selection:bg-accent/35 selection:text-on-accent',
+                                            isCopied ? 'pr-14' : ''
+                                        ]
+                                            .filter(Boolean)
+                                            .join(' ')}
+                                    >
+                                        {keyEntry.value}
+                                    </p>
                                 ) : (
-                                    <span className="text-surface-400 select-none tracking-widest text-[10px]">
-                                        {isUnlocked && keyEntry.value ? maskValue(keyEntry.value) : '••••••••••••••••'}
-                                    </span>
+                                    <p
+                                        className={[
+                                            'font-mono text-[11px] leading-none tracking-[0.22em] text-surface-500 select-none',
+                                            isCopied ? 'pr-14' : ''
+                                        ]
+                                            .filter(Boolean)
+                                            .join(' ')}
+                                        aria-hidden={!isUnlocked}
+                                    >
+                                        {isUnlocked && keyEntry.value ? maskValue(keyEntry.value) : '•••• · · · · ••••'}
+                                    </p>
                                 )}
+
                                 {isCopied && (
-                                    <span className="px-1.5 py-0.5 bg-accent-muted border border-accent/25 text-[9px] text-accent rounded font-sans">
+                                    <span className="absolute top-1.5 right-1.5 px-1.5 py-0.5 bg-accent-muted border border-accent/30 text-[9px] font-medium tracking-wide text-accent rounded font-sans pointer-events-none">
                                         Copied
                                     </span>
                                 )}
