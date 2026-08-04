@@ -27,9 +27,9 @@ function formatDate(isoStr: string): string {
 
 function maskValue(value: string): string {
     if (value.length > 12) {
-        return `${value.slice(0, 4)} · · · · ${value.slice(-4)}`;
+        return `${value.slice(0, 4)}••••••••${value.slice(-4)}`;
     }
-    return '•••• · · · · ••••';
+    return '••••••••••••••••';
 }
 
 export default function ApiKeyCard({
@@ -50,7 +50,7 @@ export default function ApiKeyCard({
 
     return (
         <motion.article
-            layout
+            layout="position"
             initial={{opacity: 0, y: 10}}
             animate={{opacity: 1, y: 0}}
             exit={{opacity: 0, scale: 0.97}}
@@ -152,16 +152,16 @@ export default function ApiKeyCard({
                             </div>
 
                             <div
-                                className={`relative mx-2 mb-2 rounded-md px-2.5 py-2 transition-colors duration-150 ${
+                                className={`relative mx-2 mb-2 rounded-md px-2.5 py-2 border transition-colors duration-150 ${
                                     showPlain
-                                        ? 'bg-surface-900/80 border border-accent/20'
-                                        : 'bg-surface-900/40 border border-transparent'
+                                        ? 'bg-surface-900/80 border-accent/20'
+                                        : 'bg-surface-900/40 border-surface-800/60'
                                 }`}
                             >
                                 {showPlain ? (
                                     <p
                                         className={[
-                                            'font-mono text-[12px] sm:text-[13px] leading-[1.65]',
+                                            'font-mono text-xs leading-relaxed',
                                             'tracking-[0.02em] text-surface-100',
                                             'break-all [overflow-wrap:anywhere]',
                                             'selection:bg-accent/35 selection:text-on-accent',
@@ -175,14 +175,14 @@ export default function ApiKeyCard({
                                 ) : (
                                     <p
                                         className={[
-                                            'font-mono text-[11px] leading-none tracking-[0.22em] text-surface-500 select-none',
+                                            'font-mono text-[10px] leading-relaxed tracking-widest text-surface-400 select-none',
                                             isCopied ? 'pr-14' : ''
                                         ]
                                             .filter(Boolean)
                                             .join(' ')}
                                         aria-hidden={!isUnlocked}
                                     >
-                                        {isUnlocked && keyEntry.value ? maskValue(keyEntry.value) : '•••• · · · · ••••'}
+                                        {isUnlocked && keyEntry.value ? maskValue(keyEntry.value) : '••••••••••••••••'}
                                     </p>
                                 )}
 
