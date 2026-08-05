@@ -18,7 +18,7 @@ export default function VaultMobileDock({syncActive, onOpenSync, onOpenSettings,
             aria-label="Primary actions"
             className="sm:hidden fixed bottom-0 inset-x-0 z-30 border-t border-surface-800 bg-surface-950/95 backdrop-blur-md"
         >
-            <div className="px-4 pt-2.5 safe-pb flex items-center gap-2">
+            <div className="px-4 pt-2.5 pb-[calc(0.625rem+env(safe-area-inset-bottom,0px))] flex items-center gap-2">
                 <IconButton label="Device sync" active={syncActive} onClick={onOpenSync} className="shrink-0">
                     <Radio className="w-4 h-4" />
                 </IconButton>

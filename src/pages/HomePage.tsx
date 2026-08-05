@@ -133,7 +133,7 @@ export default function HomePage() {
                             initial={{opacity: 0}}
                             animate={{opacity: 1}}
                             exit={{opacity: 0}}
-                            className="flex-1 flex flex-col min-h-0 pb-24 sm:pb-0"
+                            className="flex-1 flex flex-col min-h-0 pb-[calc(4rem+env(safe-area-inset-bottom,0px))] sm:pb-0"
                         >
                             <VaultHeader
                                 isUnlocked={!!vault.masterKey}
