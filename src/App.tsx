@@ -5,7 +5,7 @@ import {Outlet} from 'react-router';
  */
 export default function App() {
     return (
-        <div id="app" className="h-full min-h-dvh max-h-dvh overflow-hidden overscroll-none">
+        <div id="app" className="h-full overflow-hidden overscroll-none">
             <Outlet />
         </div>
     );

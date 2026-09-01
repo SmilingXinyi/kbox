@@ -2,7 +2,7 @@ import {Link} from 'react-router';
 
 export default function NotFoundPage() {
     return (
-        <main className="min-h-dvh flex flex-col items-center justify-center gap-4 p-6 text-center bg-surface-950 text-surface-100 safe-pt safe-pb">
+        <main className="min-h-full h-full flex flex-col items-center justify-center gap-4 p-6 text-center bg-surface-950 text-surface-100 safe-pt safe-pb">
             <div className="h-1 w-24 hazard-stripe rounded-full mb-2" aria-hidden />
             <p className="font-display text-accent text-sm font-semibold tracking-wide">kbox</p>
             <h1 className="font-display text-2xl font-semibold tracking-tight">Page not found</h1>

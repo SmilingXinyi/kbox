@@ -87,7 +87,7 @@ export default function HomePage() {
     const showDashboard = vault.vaultState === 'unlocked';
 
     return (
-        <div className="h-dvh max-h-dvh overflow-hidden bg-surface-950 text-surface-100 flex flex-col font-sans antialiased relative overscroll-none">
+        <div className="h-full overflow-hidden bg-surface-950 text-surface-100 flex flex-col font-sans antialiased relative overscroll-none">
             <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden" aria-hidden>
                 <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_color-mix(in_srgb,var(--color-accent)_8%,transparent),_transparent_55%)]" />
                 <div
@@ -133,7 +133,7 @@ export default function HomePage() {
                             initial={{opacity: 0}}
                             animate={{opacity: 1}}
                             exit={{opacity: 0}}
-                            className="flex-1 flex flex-col min-h-0 pb-[calc(4rem+env(safe-area-inset-bottom,0px))] sm:pb-0"
+                            className="flex-1 flex flex-col min-h-0 dock-clearance"
                         >
                             <VaultHeader
                                 isUnlocked={!!vault.masterKey}

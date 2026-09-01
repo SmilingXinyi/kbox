@@ -30,6 +30,12 @@
     --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
 }
 
+:root {
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --dock-pad-y: 0.625rem;
+    --dock-btn-size: 2.75rem;
+}
+
 *,
 *::before,
 *::after {
@@ -49,16 +55,13 @@ html {
 
 body {
     margin: 0;
-    height: 100%;
-    min-height: 100dvh;
-    max-height: 100dvh;
     overflow: hidden;
     overscroll-behavior: none;
     font-family: var(--font-sans);
     background-color: var(--color-surface-950);
     color: var(--color-surface-100);
     -webkit-font-smoothing: antialiased;
-    /* Prevent iOS rubber-band scrolling the document behind the app shell. */
+    /* inset:0 fills the cover viewport; do not also set 100dvh (iOS double-counts the home indicator). */
     position: fixed;
     inset: 0;
     width: 100%;
@@ -68,8 +71,6 @@ body {
 
 #root {
     height: 100%;
-    min-height: 100dvh;
-    max-height: 100dvh;
     overflow: hidden;
     overscroll-behavior: none;
 }
@@ -121,13 +122,32 @@ body {
     );
 }
 
-/* Design padding + system inset (do not use max — that floats content on 0-inset devices). */
+/* Sheets / unlock: keep inner padding and add the home-indicator inset. */
 .safe-pb {
-    padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(1rem + var(--safe-bottom));
 }
 
 .safe-pt {
     padding-top: max(0px, env(safe-area-inset-top));
+}
+
+/*
+ * Dock sits on the physical bottom edge. Use max() so zero-inset devices keep
+ * --dock-pad-y, and iPhone does not stack that pad on top of the 34px inset.
+ */
+.dock-pad-bottom {
+    padding-bottom: max(var(--dock-pad-y), var(--safe-bottom));
+}
+
+/* Scroll clearance = dock top pad + button row + dock bottom pad. */
+.dock-clearance {
+    padding-bottom: calc(var(--dock-pad-y) + var(--dock-btn-size) + max(var(--dock-pad-y), var(--safe-bottom)));
+}
+
+@media (min-width: 640px) {
+    .dock-clearance {
+        padding-bottom: 0;
+    }
 }
 
 /* Hide scrollbar while keeping scroll / swipe / keyboard scroll */
