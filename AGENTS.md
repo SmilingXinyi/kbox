@@ -187,3 +187,10 @@ docs: clarify AGENTS layout
 - 引入 monorepo 工具链
 - force push 或破坏性 git 操作
 - 使用 `--no-verify` 跳过 hooks
+
+## Cursor Cloud specific instructions
+
+- **Client-only SPA** — no backend or database. The only long-running service is the Vite dev server (`pnpm dev`, serves `http://localhost:5173/`). Standard commands live in `README.md` / `package.json` scripts.
+- **Cypress binary** — `pnpm test` (`cypress run --component --browser chrome`) needs the Cypress binary, but pnpm ignores Cypress's install script during `pnpm install`. The startup update script runs `pnpm exec cypress install` (idempotent) to fetch it; if tests error with a missing binary, run that manually. Chrome is preinstalled in the VM.
+- **Known flaky component tests** — `VaultSync.cy.tsx` ("shows QR while host is waiting") and `usePWA.cy.tsx` (service-worker registration) can fail under headless Chrome due to viewport/`position:fixed` visibility and SW-registration timing, not app logic. The other 29 component tests pass.
+- **Vault PIN** — the setup form enforces a 6–12 character PIN (README's "4–12" is outdated); use e.g. `123456` when manually testing vault setup.
