@@ -48,6 +48,7 @@
 html {
     color-scheme: dark;
     height: 100%;
+    height: -webkit-fill-available;
     overflow: hidden;
     overscroll-behavior: none;
     -webkit-text-size-adjust: 100%;
@@ -58,14 +59,19 @@ html {
 
 body {
     margin: 0;
-    height: 100%;
+    /* Stretch to the visual viewport including iOS unsafe areas.
+       Do not also set height/100dvh — that over-constrains and clips to the
+       lying layout viewport, leaving a letterbox below position:fixed docks. */
+    position: fixed;
+    inset: 0;
+    width: auto;
+    height: auto;
     overflow: hidden;
     overscroll-behavior: none;
     font-family: var(--font-sans);
     background-color: var(--color-surface-950);
     color: var(--color-surface-100);
     -webkit-font-smoothing: antialiased;
-    width: 100%;
     -ms-touch-action: manipulation;
     touch-action: manipulation;
 }
