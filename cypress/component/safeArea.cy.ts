@@ -1,4 +1,4 @@
-import {remainingSafeBottomPx} from '../../src/lib/safeArea';
+import {remainingSafeBottomPx, resolveAppHeightPx} from '../../src/lib/safeArea';
 
 describe('remainingSafeBottomPx', () => {
     it('keeps the home-indicator inset when fixed bottom is on the screen edge', () => {
@@ -70,5 +70,23 @@ describe('remainingSafeBottomPx', () => {
                 screenHeight: 430
             })
         ).to.eq(21);
+    });
+});
+
+describe('resolveAppHeightPx', () => {
+    it('expands a home-indicator letterbox to the screen', () => {
+        expect(resolveAppHeightPx({layoutHeight: 898, screenHeight: 932})).to.eq(932);
+    });
+
+    it('expands a status-bar-sized letterbox to the screen', () => {
+        expect(resolveAppHeightPx({layoutHeight: 873, screenHeight: 932})).to.eq(932);
+    });
+
+    it('does not expand a windowed desktop shortfall', () => {
+        expect(resolveAppHeightPx({layoutHeight: 800, screenHeight: 1440})).to.eq(800);
+    });
+
+    it('keeps an already edge-to-edge layout', () => {
+        expect(resolveAppHeightPx({layoutHeight: 932, screenHeight: 932})).to.eq(932);
     });
 });

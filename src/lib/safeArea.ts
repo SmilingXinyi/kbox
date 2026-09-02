@@ -1,26 +1,31 @@
 /**
- * --safe-bottom is extra bottom inset still inside the box that
- * `position:fixed; bottom:0` actually sits in (the dock's containing block).
+ * --app-height is the box we paint into. --safe-bottom is extra inset still
+ * inside that box.
  *
- * remaining = max(0, inset − alreadyOutside)
+ * remaining = max(0, inset − (screenHeight − appHeight))
  *
- * - inset: env(safe-area-inset-bottom), phantom Safari chrome (~83px) capped to 34px
- * - alreadyOutside: screenHeight − layoutBottomY, where layoutBottomY is a
- *   0-height `position:fixed; bottom:0` probe (not innerHeight, which can lie)
- *
- * iOS home-screen PWAs often report innerHeight === screen.height while the
- * fixed bottom is already 34px above the home indicator. Padding by env() then
- * stacks a second gap. The probe matches the dock, so that case yields 0.
+ * iOS PWAs often give a layout viewport shorter than the screen (letterbox
+ * under the home indicator). `position:fixed; inset:0` then clips sheets and
+ * the dock. If the shortfall looks like a safe-area (≤120px), we expand
+ * --app-height to the screen and shift fixed-bottom chrome with --app-bottom-shift.
  */
 
 const HOME_INDICATOR_PX = 34;
 const PHANTOM_CHROME_INSET_PX = 50;
+/** Status bar + home indicator. Larger gaps are a windowed desktop, not letterbox. */
+const LETTERBOX_MAX_PX = 120;
 
 export function remainingSafeBottomPx(input: {cssBottom: number; layoutBottomY: number; screenHeight: number}): number {
     const inset = input.cssBottom >= PHANTOM_CHROME_INSET_PX ? HOME_INDICATOR_PX : input.cssBottom;
     if (inset <= 0) return 0;
     const alreadyOutside = Math.max(0, input.screenHeight - input.layoutBottomY);
     return Math.max(0, inset - alreadyOutside);
+}
+
+/** Grow the app box to the screen when iOS letterboxes a small safe-area strip. */
+export function resolveAppHeightPx(input: {layoutHeight: number; screenHeight: number}): number {
+    const shortfall = input.screenHeight - input.layoutHeight;
+    return shortfall > 0 && shortfall <= LETTERBOX_MAX_PX ? input.screenHeight : input.layoutHeight;
 }
 
 function screenHeightCssPx(): number {
@@ -39,7 +44,6 @@ function readEnvBottomInset(): number {
     return value;
 }
 
-/** Y of `position:fixed; bottom:0` — same containing block as the dock. */
 function readFixedLayoutBottomY(): number {
     const el = document.createElement('div');
     el.style.cssText = 'position:fixed;bottom:0;left:0;width:0;height:0;visibility:hidden;pointer-events:none';
@@ -49,19 +53,24 @@ function readFixedLayoutBottomY(): number {
     return y;
 }
 
-function syncSafeAreaBottom(): void {
+function syncViewportBox(): void {
+    const screenHeight = screenHeightCssPx();
+    const layoutHeight = Math.max(window.innerHeight, window.visualViewport?.height ?? 0, readFixedLayoutBottomY());
+    const appHeight = resolveAppHeightPx({layoutHeight, screenHeight});
+    document.documentElement.style.setProperty('--app-height', `${appHeight}px`);
+    document.documentElement.style.setProperty('--app-bottom-shift', `${Math.max(0, appHeight - layoutHeight)}px`);
     const remaining = remainingSafeBottomPx({
         cssBottom: readEnvBottomInset(),
-        layoutBottomY: readFixedLayoutBottomY(),
-        screenHeight: screenHeightCssPx()
+        layoutBottomY: appHeight,
+        screenHeight
     });
     document.documentElement.style.setProperty('--safe-bottom', `${remaining}px`);
 }
 
 /** Bind once at app startup. Updates on rotate, URL-bar collapse, and keyboard. */
 export function bindSafeAreaSync(): () => void {
-    syncSafeAreaBottom();
-    const onChange = () => syncSafeAreaBottom();
+    syncViewportBox();
+    const onChange = () => syncViewportBox();
     const ac = new AbortController();
     const {signal} = ac;
     const vv = window.visualViewport;

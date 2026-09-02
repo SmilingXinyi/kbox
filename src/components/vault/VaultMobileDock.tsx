@@ -17,7 +17,7 @@ export default function VaultMobileDock({syncActive, onOpenSync, onOpenSettings,
     return (
         <nav
             aria-label="Primary actions"
-            className="sm:hidden fixed bottom-0 inset-x-0 z-30 border-t border-surface-800 bg-surface-950"
+            className="sm:hidden app-fixed-bottom fixed inset-x-0 z-30 border-t border-surface-800 bg-surface-950"
         >
             <div className="px-4 pt-2.5 dock-pad-bottom flex items-center gap-2">
                 <IconButton label="Device sync" active={syncActive} onClick={onOpenSync} className="shrink-0">
