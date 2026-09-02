@@ -233,16 +233,17 @@ export default function HomePage() {
                                     </div>
                                 )}
                             </main>
-
-                            <VaultMobileDock
-                                syncActive={sync.isActive}
-                                onOpenSync={() => setIsSyncOpen(true)}
-                                onOpenSettings={() => setIsSettingsOpen(true)}
-                                onAdd={openAddForm}
-                            />
                         </motion.div>
                     )}
                 </AnimatePresence>
+                {showDashboard ? (
+                    <VaultMobileDock
+                        syncActive={sync.isActive}
+                        onOpenSync={() => setIsSyncOpen(true)}
+                        onOpenSettings={() => setIsSettingsOpen(true)}
+                        onAdd={openAddForm}
+                    />
+                ) : null}
             </div>
 
             {vault.showUnlockModal && vault.metadata && (

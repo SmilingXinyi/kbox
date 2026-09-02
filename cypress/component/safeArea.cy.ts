@@ -13,6 +13,30 @@ describe('remainingSafeBottomPx', () => {
         ).to.eq(34);
     });
 
+    it('caps an inflated Safari chrome inset on an edge-to-edge PWA viewport', () => {
+        // iOS 26 may report ~83px (indicator + toolbar) while the PWA is already full-screen.
+        expect(
+            remainingSafeBottomPx({
+                cssTop: 59,
+                cssBottom: 83,
+                viewportHeight: 932,
+                screenHeight: 932
+            })
+        ).to.eq(34);
+    });
+
+    it('returns 0 when the viewport already excluded the home indicator', () => {
+        // 932 − 34 = 898. Must not subtract cssTop or remaining stays 34 and stacks.
+        expect(
+            remainingSafeBottomPx({
+                cssTop: 59,
+                cssBottom: 34,
+                viewportHeight: 898,
+                screenHeight: 932
+            })
+        ).to.eq(0);
+    });
+
     it('returns 0 when the viewport already excluded both insets (lying viewport)', () => {
         expect(
             remainingSafeBottomPx({

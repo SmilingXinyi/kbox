@@ -11,12 +11,13 @@ type VaultMobileDockProps = {
 
 /**
  * Fixed bottom actions for small screens. Desktop uses the header toolbar instead.
+ * Must not sit under a transformed ancestor — that would retarget `fixed` to that box.
  */
 export default function VaultMobileDock({syncActive, onOpenSync, onOpenSettings, onAdd}: VaultMobileDockProps) {
     return (
         <nav
             aria-label="Primary actions"
-            className="sm:hidden fixed bottom-0 inset-x-0 z-30 border-t border-surface-800 bg-surface-950/95 backdrop-blur-md"
+            className="sm:hidden fixed bottom-0 inset-x-0 z-30 border-t border-surface-800 bg-surface-950"
         >
             <div className="px-4 pt-2.5 dock-pad-bottom flex items-center gap-2">
                 <IconButton label="Device sync" active={syncActive} onClick={onOpenSync} className="shrink-0">
