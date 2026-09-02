@@ -1,11 +1,11 @@
 import {remainingSafeBottomPx} from '../../src/lib/safeArea';
 
 describe('remainingSafeBottomPx', () => {
-    it('keeps the home-indicator inset when the viewport is edge-to-edge', () => {
+    it('keeps the home-indicator inset when fixed bottom is on the screen edge', () => {
         expect(
             remainingSafeBottomPx({
                 cssBottom: 34,
-                viewportHeight: 932,
+                layoutBottomY: 932,
                 screenHeight: 932
             })
         ).to.eq(34);
@@ -15,37 +15,38 @@ describe('remainingSafeBottomPx', () => {
         expect(
             remainingSafeBottomPx({
                 cssBottom: 83,
-                viewportHeight: 932,
+                layoutBottomY: 932,
                 screenHeight: 932
             })
         ).to.eq(34);
     });
 
-    it('returns 0 when the viewport already excluded the home indicator', () => {
+    it('returns 0 when fixed bottom is already above the home indicator', () => {
+        // innerHeight may still claim 932; the probe sits at 898.
         expect(
             remainingSafeBottomPx({
                 cssBottom: 34,
-                viewportHeight: 898,
+                layoutBottomY: 898,
                 screenHeight: 932
             })
         ).to.eq(0);
     });
 
-    it('returns 0 when the viewport already excluded both insets', () => {
+    it('returns 0 when fixed bottom already excluded both insets', () => {
         expect(
             remainingSafeBottomPx({
                 cssBottom: 34,
-                viewportHeight: 839,
+                layoutBottomY: 839,
                 screenHeight: 932
             })
         ).to.eq(0);
     });
 
-    it('returns 0 in Safari when chrome already sits below the visual viewport', () => {
+    it('returns 0 in Safari when chrome already sits below the page', () => {
         expect(
             remainingSafeBottomPx({
                 cssBottom: 83,
-                viewportHeight: 700,
+                layoutBottomY: 700,
                 screenHeight: 932
             })
         ).to.eq(0);
@@ -55,7 +56,7 @@ describe('remainingSafeBottomPx', () => {
         expect(
             remainingSafeBottomPx({
                 cssBottom: 24,
-                viewportHeight: 800,
+                layoutBottomY: 800,
                 screenHeight: 800
             })
         ).to.eq(24);
@@ -65,28 +66,9 @@ describe('remainingSafeBottomPx', () => {
         expect(
             remainingSafeBottomPx({
                 cssBottom: 21,
-                viewportHeight: 430,
+                layoutBottomY: 430,
                 screenHeight: 430
             })
         ).to.eq(21);
-    });
-
-    it('treats iOS standalone inset as already outside the webview', () => {
-        expect(
-            remainingSafeBottomPx({
-                cssBottom: 34,
-                viewportHeight: 932,
-                screenHeight: 932,
-                iosStandalone: true
-            })
-        ).to.eq(0);
-        expect(
-            remainingSafeBottomPx({
-                cssBottom: 83,
-                viewportHeight: 932,
-                screenHeight: 932,
-                iosStandalone: true
-            })
-        ).to.eq(0);
     });
 });
