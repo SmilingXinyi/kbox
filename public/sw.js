@@ -1,5 +1,5 @@
 // Bump this when caching strategy or shell assets change so old caches are dropped.
-const CACHE_NAME = 'kbox-v8';
+const CACHE_NAME = 'kbox-v9';
 /** Resolve against the SW URL so project-site bases (e.g. /kbox/) work. */
 const assetUrl = path => new URL(path, self.location).href;
 const STABLE_ASSETS = [

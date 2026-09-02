@@ -31,8 +31,9 @@
 }
 
 :root {
-    /* JS overwrites this with the inset still inside the current viewport. */
-    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    /* JS overwrites this before first paint. Do not default to raw env() —
+       iOS may report ~83px (indicator + chrome) which flashes a huge gap. */
+    --safe-bottom: 0px;
     --dock-pad-y: 0.625rem;
     --dock-btn-size: 2.75rem;
 }
@@ -63,8 +64,6 @@ body {
     background-color: var(--color-surface-950);
     color: var(--color-surface-100);
     -webkit-font-smoothing: antialiased;
-    /* Normal flow: position:fixed on body clips to the iOS "lying" viewport and
-       double-counts env(safe-area-inset-bottom) with the dock/sheet padding. */
     width: 100%;
     -ms-touch-action: manipulation;
     touch-action: manipulation;
