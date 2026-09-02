@@ -31,9 +31,10 @@
 }
 
 :root {
-    /* Remaining in-viewport bottom inset. JS overwrites before first paint.
-       Default 0 so a raw env() of ~83px cannot flash a gap. */
+    /* Remaining in-viewport bottom inset. JS overwrites before first paint. */
     --safe-bottom: 0px;
+    --app-height: 100dvh;
+    --app-bottom-shift: 0px;
     --dock-pad-y: 0.625rem;
     --dock-btn-size: 2.75rem;
     --dock-pad-bottom: max(var(--dock-pad-y), var(--safe-bottom));
@@ -47,8 +48,7 @@
 
 html {
     color-scheme: dark;
-    height: 100%;
-    height: -webkit-fill-available;
+    height: var(--app-height, 100%);
     overflow: hidden;
     overscroll-behavior: none;
     -webkit-text-size-adjust: 100%;
@@ -59,13 +59,12 @@ html {
 
 body {
     margin: 0;
-    /* Stretch to the visual viewport including iOS unsafe areas.
-       Do not also set height/100dvh — that over-constrains and clips to the
-       lying layout viewport, leaving a letterbox below position:fixed docks. */
     position: fixed;
-    inset: 0;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: var(--app-height, 100%);
     width: auto;
-    height: auto;
     overflow: hidden;
     overscroll-behavior: none;
     font-family: var(--font-sans);
@@ -80,6 +79,23 @@ body {
     height: 100%;
     overflow: hidden;
     overscroll-behavior: none;
+}
+
+/* Cover the letterboxed iOS PWA strip: height is --app-height, not the ICB. */
+.app-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: var(--app-height, 100%);
+}
+
+.app-fixed-bottom {
+    bottom: calc(-1 * var(--app-bottom-shift, 0px));
+}
+
+.sheet-scroll {
+    -webkit-overflow-scrolling: touch;
 }
 
 /*

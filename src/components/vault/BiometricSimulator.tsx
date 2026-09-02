@@ -104,7 +104,7 @@ export default function BiometricSimulator({
 
     return (
         <AnimatePresence mode="wait">
-            <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-surface-950/85 backdrop-blur-[2px]">
+            <div className="app-overlay z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-surface-950/85 backdrop-blur-[2px]">
                 <motion.div
                     initial={{opacity: 0, y: 20, scale: 0.98}}
                     animate={{opacity: 1, y: 0, scale: 1}}
