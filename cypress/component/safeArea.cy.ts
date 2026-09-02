@@ -80,4 +80,28 @@ describe('remainingSafeBottomPx', () => {
             })
         ).to.eq(21);
     });
+
+    it('returns 0 on an iOS home-screen PWA even when the viewport claims to be edge-to-edge', () => {
+        expect(
+            remainingSafeBottomPx({
+                cssTop: 59,
+                cssBottom: 34,
+                viewportHeight: 932,
+                screenHeight: 932,
+                iosStandalone: true
+            })
+        ).to.eq(0);
+    });
+
+    it('returns 0 on an iOS home-screen PWA when env() is inflated to Safari chrome', () => {
+        expect(
+            remainingSafeBottomPx({
+                cssTop: 59,
+                cssBottom: 83,
+                viewportHeight: 932,
+                screenHeight: 932,
+                iosStandalone: true
+            })
+        ).to.eq(0);
+    });
 });

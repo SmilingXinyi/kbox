@@ -1,13 +1,14 @@
 /**
- * iOS with viewport-fit=cover often reports env(safe-area-inset-bottom)
- * against the physical screen, while the layout/visual viewport already
- * excludes that strip ("lying viewport"). Padding by the raw env() value
- * then reserves the home indicator twice.
+ * Safari (in-browser) is fine: the toolbar already sits below the page, so
+ * screen − viewport cancels env(safe-area-inset-bottom).
  *
- * Safari / iOS 26 can also inflate the bottom inset to ~83px (home indicator
- * + browser chrome) even in a standalone PWA. Cap that to the indicator.
+ * iOS home-screen PWAs (`navigator.standalone` / display-mode: standalone) use
+ * a WKWebView that is already letterboxed above the home indicator, while
+ * env(safe-area-inset-bottom) still reports 34px (or ~83px with phantom chrome).
+ * Padding by that value stacks a second gap. Skip the bottom inset there.
  *
- * Remaining inset = clamped CSS inset minus the strip already outside this viewport.
+ * Remaining inset = clamped CSS inset minus the strip already outside this viewport,
+ * then forced to 0 on iOS standalone.
  */
 
 /** Typical iPhone home-indicator height (CSS px). */
@@ -15,6 +16,27 @@ export const IOS_HOME_INDICATOR_PX = 34;
 
 /** Insets at or above this are treated as indicator + browser chrome. */
 const INFLATED_BOTTOM_INSET_PX = 50;
+
+type NavigatorWithStandalone = Navigator & {standalone?: boolean};
+
+export function isIosDevice(): boolean {
+    const ua = navigator.userAgent;
+    if (/iPad|iPhone|iPod/.test(ua)) return true;
+    return navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
+}
+
+export function isStandaloneDisplay(): boolean {
+    const nav = navigator as NavigatorWithStandalone;
+    if (nav.standalone === true) return true;
+    return (
+        window.matchMedia('(display-mode: standalone)').matches ||
+        window.matchMedia('(display-mode: fullscreen)').matches
+    );
+}
+
+export function isIosStandalonePwa(): boolean {
+    return isIosDevice() && isStandaloneDisplay();
+}
 
 export function clampReportedBottomInset(cssBottom: number): number {
     return cssBottom >= INFLATED_BOTTOM_INSET_PX ? IOS_HOME_INDICATOR_PX : cssBottom;
@@ -25,7 +47,9 @@ export function remainingSafeBottomPx(input: {
     cssBottom: number;
     viewportHeight: number;
     screenHeight: number;
+    iosStandalone?: boolean;
 }): number {
+    if (input.iosStandalone) return 0;
     const cssBottom = clampReportedBottomInset(input.cssBottom);
     if (cssBottom <= 0) return 0;
     // Screen-minus-viewport is the strip already outside this viewport.
@@ -59,7 +83,8 @@ export function syncSafeAreaBottom(): void {
         cssTop,
         cssBottom,
         viewportHeight,
-        screenHeight: screenHeightCssPx()
+        screenHeight: screenHeightCssPx(),
+        iosStandalone: isIosStandalonePwa()
     });
     document.documentElement.style.setProperty('--safe-bottom', `${remaining}px`);
 }
@@ -69,14 +94,20 @@ export function bindSafeAreaSync(): () => void {
     syncSafeAreaBottom();
     const onChange = () => syncSafeAreaBottom();
     const vv = window.visualViewport;
+    const standaloneMq = window.matchMedia('(display-mode: standalone)');
+    const fullscreenMq = window.matchMedia('(display-mode: fullscreen)');
     vv?.addEventListener('resize', onChange);
     vv?.addEventListener('scroll', onChange);
     window.addEventListener('resize', onChange);
     window.addEventListener('orientationchange', onChange);
+    standaloneMq.addEventListener('change', onChange);
+    fullscreenMq.addEventListener('change', onChange);
     return () => {
         vv?.removeEventListener('resize', onChange);
         vv?.removeEventListener('scroll', onChange);
         window.removeEventListener('resize', onChange);
         window.removeEventListener('orientationchange', onChange);
+        standaloneMq.removeEventListener('change', onChange);
+        fullscreenMq.removeEventListener('change', onChange);
     };
 }
