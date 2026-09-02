@@ -31,6 +31,7 @@
 }
 
 :root {
+    /* JS overwrites this with the inset still inside the current viewport. */
     --safe-bottom: env(safe-area-inset-bottom, 0px);
     --dock-pad-y: 0.625rem;
     --dock-btn-size: 2.75rem;
@@ -55,15 +56,15 @@ html {
 
 body {
     margin: 0;
+    height: 100%;
     overflow: hidden;
     overscroll-behavior: none;
     font-family: var(--font-sans);
     background-color: var(--color-surface-950);
     color: var(--color-surface-100);
     -webkit-font-smoothing: antialiased;
-    /* inset:0 fills the cover viewport; do not also set 100dvh (iOS double-counts the home indicator). */
-    position: fixed;
-    inset: 0;
+    /* Normal flow: position:fixed on body clips to the iOS "lying" viewport and
+       double-counts env(safe-area-inset-bottom) with the dock/sheet padding. */
     width: 100%;
     -ms-touch-action: manipulation;
     touch-action: manipulation;
