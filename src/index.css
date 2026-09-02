@@ -31,11 +31,12 @@
 }
 
 :root {
-    /* JS overwrites this before first paint. Do not default to raw env() —
-       iOS may report ~83px (indicator + chrome) which flashes a huge gap. */
+    /* Remaining in-viewport bottom inset. JS overwrites before first paint.
+       Default 0 so a raw env() of ~83px cannot flash a gap. */
     --safe-bottom: 0px;
     --dock-pad-y: 0.625rem;
     --dock-btn-size: 2.75rem;
+    --dock-pad-bottom: max(var(--dock-pad-y), var(--safe-bottom));
 }
 
 *,
@@ -122,7 +123,7 @@ body {
     );
 }
 
-/* Sheets / unlock: keep inner padding and add the home-indicator inset. */
+/* Sheets / unlock: 1rem inner pad plus remaining bottom inset. */
 .safe-pb {
     padding-bottom: calc(1rem + var(--safe-bottom));
 }
@@ -131,17 +132,13 @@ body {
     padding-top: max(0px, env(safe-area-inset-top));
 }
 
-/*
- * Dock sits on the physical bottom edge. Use max() so zero-inset devices keep
- * --dock-pad-y, and iPhone does not stack that pad on top of the 34px inset.
- */
 .dock-pad-bottom {
-    padding-bottom: max(var(--dock-pad-y), var(--safe-bottom));
+    padding-bottom: var(--dock-pad-bottom);
 }
 
 /* Scroll clearance = dock top pad + button row + dock bottom pad. */
 .dock-clearance {
-    padding-bottom: calc(var(--dock-pad-y) + var(--dock-btn-size) + max(var(--dock-pad-y), var(--safe-bottom)));
+    padding-bottom: calc(var(--dock-pad-y) + var(--dock-btn-size) + var(--dock-pad-bottom));
 }
 
 @media (min-width: 640px) {
