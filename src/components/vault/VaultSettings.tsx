@@ -1,6 +1,7 @@
 import {useState} from 'react';
 import {Fingerprint, Tag, Timer, X} from 'lucide-react';
 import type {ApiKeyItem, LockBehavior, VaultMetadata} from '../../types/vault';
+import {APP_VERSION} from '../../lib/appVersion';
 import Modal from '../ui/Modal';
 import Button from '../ui/Button';
 import Alert from '../ui/Alert';
@@ -182,6 +183,10 @@ export default function VaultSettings({
                     Reset vault…
                 </Button>
             </section>
+
+            <p className="mt-6 text-center text-[10px] font-mono tracking-wide text-surface-500">
+                Version {APP_VERSION}
+            </p>
         </Modal>
     );
 }
