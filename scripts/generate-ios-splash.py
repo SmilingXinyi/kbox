@@ -17,8 +17,13 @@ from PIL import Image
 ROOT = Path(__file__).resolve().parents[1]
 ICON_PATH = ROOT / "public/icons/icon-512.png"
 OUT_DIR = ROOT / "public/icons/splash"
+MARK_PATH = OUT_DIR / "mark.png"
 INDEX_HTML = ROOT / "index.html"
 BG = (10, 10, 10, 255)  # #0a0a0a
+# icon-512 is an RGB plate (white card + dark bezel). Treat light pixels as
+# transparent so splash/boot stay on-theme instead of a white square.
+LIGHT_PLATE_MIN = 220
+MARK_SIZE = 256
 
 # device-width, device-height, pixel-ratio → PNG pixels
 DEVICES: list[tuple[int, int, int]] = [
@@ -28,12 +33,14 @@ DEVICES: list[tuple[int, int, int]] = [
     (375, 812, 3),  # iPhone X / 11 Pro / 12-13 mini
     (390, 844, 3),  # iPhone 12/13/14
     (393, 852, 3),  # iPhone 14/15 Pro, 16
-    (402, 874, 3),  # iPhone 16 Pro
+    (402, 873, 3),  # iPhone 17 Pro (some tables)
+    (402, 874, 3),  # iPhone 16 Pro / 17
     (414, 896, 2),  # iPhone 11 / XR
     (414, 896, 3),  # iPhone 11 Pro Max / XS Max
+    (420, 912, 3),  # iPhone Air
     (428, 926, 3),  # iPhone 12/13 Pro Max, 14 Plus
     (430, 932, 3),  # iPhone 14 Pro Max / 15 Plus / 16 Plus
-    (440, 956, 3),  # iPhone 16 Pro Max
+    (440, 956, 3),  # iPhone 16/17 Pro Max
     (744, 1133, 2),  # iPad mini
     (768, 1024, 2),  # iPad 9.7
     (810, 1080, 2),  # iPad 10.2
@@ -58,6 +65,18 @@ def media_query(dw: int, dh: int, dpr: int, landscape: bool) -> str:
         f"screen and (device-width: {dw}px) and (device-height: {dh}px) "
         f"and (-webkit-device-pixel-ratio: {dpr}) and (orientation: {orientation})"
     )
+
+
+def punch_light_plate(icon: Image.Image) -> Image.Image:
+    rgba = icon.convert("RGBA")
+    pixels = rgba.load()
+    width, height = rgba.size
+    for y in range(height):
+        for x in range(width):
+            red, green, blue, _alpha = pixels[x, y]
+            if red >= LIGHT_PLATE_MIN and green >= LIGHT_PLATE_MIN and blue >= LIGHT_PLATE_MIN:
+                pixels[x, y] = (0, 0, 0, 0)
+    return rgba
 
 
 def compose(px_w: int, px_h: int, icon: Image.Image) -> Image.Image:
@@ -93,7 +112,9 @@ def patch_index(links_html: str) -> None:
 
 def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    icon = Image.open(ICON_PATH).convert("RGBA")
+    icon = punch_light_plate(Image.open(ICON_PATH))
+    mark = icon.resize((MARK_SIZE, MARK_SIZE), Image.Resampling.LANCZOS)
+    mark.save(MARK_PATH, format="PNG", optimize=True)
     seen: set[tuple[int, int]] = set()
     files: list[tuple[str, str]] = []
 
