@@ -38,6 +38,7 @@
     --dock-pad-y: 0.625rem;
     --dock-btn-size: 2.75rem;
     --dock-pad-bottom: max(var(--dock-pad-y), var(--safe-bottom));
+    --safe-top: env(safe-area-inset-top, 0px);
 }
 
 *,
@@ -151,7 +152,23 @@ body {
 }
 
 .safe-pt {
-    padding-top: max(0px, env(safe-area-inset-top));
+    padding-top: max(0px, var(--safe-top));
+}
+
+/* Full-bleed mobile sheets: keep title/close below the camera / Dynamic Island.
+   Centered sm+ cards already sit inside overlay padding — do not stack inset. */
+.sheet-safe-edges {
+    padding-top: var(--safe-top);
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+}
+
+@media (min-width: 640px) {
+    .sheet-safe-edges {
+        padding-top: 0;
+        padding-left: 0;
+        padding-right: 0;
+    }
 }
 
 .dock-pad-bottom {
