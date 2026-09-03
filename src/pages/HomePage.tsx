@@ -14,6 +14,7 @@ import VaultSync from '../components/vault/VaultSync';
 import VaultHeader from '../components/vault/VaultHeader';
 import VaultEmptyState from '../components/vault/VaultEmptyState';
 import VaultMobileDock from '../components/vault/VaultMobileDock';
+import IosInstallHint from '../components/pwa/IosInstallHint';
 import Alert from '../components/ui/Alert';
 import Button from '../components/ui/Button';
 
@@ -101,6 +102,7 @@ export default function HomePage() {
             </div>
 
             <div className="relative z-10 flex-1 flex flex-col min-h-0 overflow-hidden">
+                <IosInstallHint />
                 <AnimatePresence mode="wait">
                     {vault.vaultState === 'loading' && (
                         <motion.div
