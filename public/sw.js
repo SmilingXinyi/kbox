@@ -1,5 +1,5 @@
 // Bump this when caching strategy or shell assets change so old caches are dropped.
-const CACHE_NAME = 'kbox-v12';
+const CACHE_NAME = 'kbox-v13';
 /** Resolve against the SW URL so project-site bases (e.g. /kbox/) work. */
 const assetUrl = path => new URL(path, self.location).href;
 const STABLE_ASSETS = [
@@ -11,7 +11,8 @@ const STABLE_ASSETS = [
     './icons/icon-512.png',
     './icons/icon-maskable-192.png',
     './icons/icon-maskable-512.png',
-    './icons/apple-touch-icon.png'
+    './icons/apple-touch-icon.png',
+    './icons/splash/mark.png'
 ].map(assetUrl);
 
 async function precacheStableAssets() {
@@ -66,9 +67,10 @@ self.addEventListener('fetch', event => {
     }
 
     // App shell / HTML: network-first so security fixes ship without a stale document.
+    // cache: 'reload' bypasses GitHub Pages' max-age=600 HTTP cache of index.html.
     if (isNavigationRequest(event.request) || url.pathname.endsWith('.html')) {
         event.respondWith(
-            fetch(event.request)
+            fetch(event.request, {cache: 'reload'})
                 .then(networkResponse => {
                     if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
                         const copy = networkResponse.clone();

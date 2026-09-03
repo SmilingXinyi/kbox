@@ -154,7 +154,11 @@ describe('PWA registration & updates', () => {
             registerServiceWorker({enabled: true});
         });
 
-        cy.get('@swRegister').should('have.been.calledWith', '/sw.js');
+        cy.get('@swRegister').should('have.been.called');
+        cy.get('@swRegister')
+            .its('firstCall.args.0')
+            .should('match', /sw\.js$/);
+        cy.get('@swRegister').its('firstCall.args.1').should('deep.equal', {updateViaCache: 'none'});
     });
 
     it('registerServiceWorker is a no-op when disabled', () => {
