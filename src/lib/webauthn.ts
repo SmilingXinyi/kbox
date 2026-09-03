@@ -37,6 +37,9 @@ type PrfExtensionClientOutputs = {
     };
 };
 
+/** Shown on the passkey sheet. Unicode (including Chinese) is allowed. */
+export const WEBAUTHN_USER_NAME_MAX_LENGTH = 64;
+
 function readPrfExtension(credential: PublicKeyCredential): PrfExtensionClientOutputs | undefined {
     const outputs = credential.getClientExtensionResults() as AuthenticationExtensionsClientOutputs & {
         prf?: PrfExtensionClientOutputs;
@@ -50,6 +53,12 @@ function randomChallenge(): Uint8Array<ArrayBuffer> {
 
 function hexToUint8Array(hex: string): Uint8Array<ArrayBuffer> {
     return new Uint8Array(hexToArrayBuffer(hex)) as Uint8Array<ArrayBuffer>;
+}
+
+function randomUserHandle(): Uint8Array<ArrayBuffer> {
+    // WebAuthn user.id is an opaque 1–64 byte handle, not the display name.
+    // Encoding CJK (or any long name) as UTF-8 can exceed 64 bytes and fail registration.
+    return window.crypto.getRandomValues(new Uint8Array(16)) as Uint8Array<ArrayBuffer>;
 }
 
 /**
@@ -89,7 +98,7 @@ export async function registerWebAuthnCredential(username: string): Promise<WebA
                     id: rpId
                 },
                 user: {
-                    id: new TextEncoder().encode(username) as Uint8Array<ArrayBuffer>,
+                    id: randomUserHandle(),
                     name: username,
                     displayName: username
                 },

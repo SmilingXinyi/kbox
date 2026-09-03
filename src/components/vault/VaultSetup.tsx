@@ -11,7 +11,12 @@ import {
     PIN_MAX_LENGTH,
     validatePinStrength
 } from '../../lib/crypto';
-import {isRunningInIframe, isWebAuthnSupported, registerWebAuthnCredential} from '../../lib/webauthn';
+import {
+    isRunningInIframe,
+    isWebAuthnSupported,
+    registerWebAuthnCredential,
+    WEBAUTHN_USER_NAME_MAX_LENGTH
+} from '../../lib/webauthn';
 import {isBiometricSimulatorEnabled} from '../../lib/biometricSimulator';
 import BiometricSimulator from './BiometricSimulator';
 import VaultRestore from './VaultBackup';
@@ -41,6 +46,10 @@ export default function VaultSetup({onInitialized, onRestored}: VaultSetupProps)
         setError(null);
         if (!username.trim()) {
             setError('Please provide an owner identifier.');
+            return false;
+        }
+        if ([...username.trim()].length > WEBAUTHN_USER_NAME_MAX_LENGTH) {
+            setError(`Owner name must be ${WEBAUTHN_USER_NAME_MAX_LENGTH} characters or fewer.`);
             return false;
         }
         const pinError = validatePinStrength(pin);
@@ -229,12 +238,19 @@ export default function VaultSetup({onInitialized, onRestored}: VaultSetupProps)
 
                     <form onSubmit={handleInitialize} className="space-y-4">
                         <TextField
+                            id="vault-owner-name"
                             label="Owner name"
                             trailingLabel="For WebAuthn"
+                            hint="English keyboard by default. Chinese and other languages are fine."
                             value={username}
                             onChange={e => setUsername(e.target.value)}
                             placeholder="e.g. cloud-master"
-                            className="[&_input]:font-mono"
+                            lang="en"
+                            autoCapitalize="none"
+                            autoCorrect="off"
+                            autoComplete="username"
+                            spellCheck={false}
+                            maxLength={WEBAUTHN_USER_NAME_MAX_LENGTH}
                             required
                         />
 
