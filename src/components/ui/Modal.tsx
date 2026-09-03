@@ -65,7 +65,7 @@ export default function Modal({
                         animate={{opacity: 1, y: 0, scale: 1}}
                         exit={{opacity: 0, y: 16, scale: 0.98}}
                         transition={{duration: 0.28, ease: [0.32, 0.72, 0, 1]}}
-                        className={`relative flex flex-col w-full ${maxWidth} h-full max-h-full sm:h-auto sm:max-h-[min(92dvh,100%)] overflow-hidden bg-surface-900 border border-surface-700 border-b-0 sm:border-b rounded-t-2xl sm:rounded-2xl shadow-[0_-8px_40px_rgba(0,0,0,0.45)]`}
+                        className={`relative flex flex-col w-full ${maxWidth} h-full max-h-full sm:h-auto sm:max-h-[min(92dvh,100%)] overflow-hidden bg-surface-900 border border-surface-700 border-b-0 sm:border-b rounded-t-2xl sm:rounded-2xl shadow-[0_-8px_40px_rgba(0,0,0,0.45)] sheet-safe-edges`}
                     >
                         <div className="h-1 w-full shrink-0 hazard-stripe rounded-t-2xl sm:rounded-t-2xl" aria-hidden />
                         {!hideHeader && (
