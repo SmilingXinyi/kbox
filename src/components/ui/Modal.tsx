@@ -68,33 +68,33 @@ export default function Modal({
                         className={`relative flex flex-col w-full ${maxWidth} h-full max-h-full sm:h-auto sm:max-h-[min(92dvh,100%)] overflow-hidden bg-surface-900 border border-surface-700 border-b-0 sm:border-b rounded-t-2xl sm:rounded-2xl shadow-[0_-8px_40px_rgba(0,0,0,0.45)]`}
                     >
                         <div className="h-1 w-full shrink-0 hazard-stripe rounded-t-2xl sm:rounded-t-2xl" aria-hidden />
+                        {!hideHeader && (
+                            <div className="shrink-0 px-5 sm:px-6 pt-4 sm:pt-5 pb-3 flex items-start justify-between gap-3 border-b border-surface-800 bg-surface-900">
+                                <div className="min-w-0">
+                                    <h2
+                                        id="kbox-modal-title"
+                                        className="font-display text-lg font-semibold tracking-tight text-surface-100"
+                                    >
+                                        {title}
+                                    </h2>
+                                    {description ? (
+                                        <p className="text-[11px] text-surface-400 mt-1.5 leading-relaxed">
+                                            {description}
+                                        </p>
+                                    ) : null}
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={onClose}
+                                    className="shrink-0 p-2.5 -mr-1 -mt-1 min-h-11 min-w-11 inline-flex items-center justify-center text-surface-400 hover:text-surface-100 hover:bg-surface-800 rounded-lg cursor-pointer pressable"
+                                    aria-label="Close"
+                                >
+                                    <X className="w-4 h-4" />
+                                </button>
+                            </div>
+                        )}
                         <div className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain scrollbar-none sheet-scroll">
-                            <div className="p-5 sm:p-6 safe-pb">
-                                {!hideHeader && (
-                                    <div className="flex items-start justify-between gap-3 mb-5">
-                                        <div className="min-w-0">
-                                            <h2
-                                                id="kbox-modal-title"
-                                                className="font-display text-lg font-semibold tracking-tight text-surface-100"
-                                            >
-                                                {title}
-                                            </h2>
-                                            {description ? (
-                                                <p className="text-[11px] text-surface-400 mt-1.5 leading-relaxed">
-                                                    {description}
-                                                </p>
-                                            ) : null}
-                                        </div>
-                                        <button
-                                            type="button"
-                                            onClick={onClose}
-                                            className="shrink-0 p-2.5 -mr-1 -mt-1 min-h-11 min-w-11 inline-flex items-center justify-center text-surface-400 hover:text-surface-100 hover:bg-surface-800 rounded-lg cursor-pointer pressable"
-                                            aria-label="Close"
-                                        >
-                                            <X className="w-4 h-4" />
-                                        </button>
-                                    </div>
-                                )}
+                            <div className={`px-5 sm:px-6 safe-pb ${hideHeader ? 'pt-5 sm:pt-6' : 'pt-4 sm:pt-5'}`}>
                                 {children}
                             </div>
                         </div>
