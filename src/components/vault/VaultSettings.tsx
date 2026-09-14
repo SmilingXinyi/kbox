@@ -1,11 +1,13 @@
 import {useState} from 'react';
 import {Fingerprint, Tag, Timer, X} from 'lucide-react';
 import type {ApiKeyItem, LockBehavior, VaultMetadata} from '../../types/vault';
+import type {UseCloudSyncReturn} from '../../hooks/useCloudSync';
 import {APP_VERSION} from '../../lib/appVersion';
 import Modal from '../ui/Modal';
 import Button from '../ui/Button';
 import Alert from '../ui/Alert';
 import {VaultBackupExport} from './VaultBackup';
+import VaultCloudSync from './VaultCloudSync';
 
 type VaultSettingsProps = {
     isOpen: boolean;
@@ -19,6 +21,7 @@ type VaultSettingsProps = {
     items: ApiKeyItem[];
     onRequestUnlock: () => void;
     onReset: () => Promise<void>;
+    cloud: UseCloudSyncReturn;
 };
 
 const LOCK_OPTIONS: {value: LockBehavior; label: string; hint: string}[] = [
@@ -40,7 +43,8 @@ export default function VaultSettings({
     masterKey,
     items,
     onRequestUnlock,
-    onReset
+    onReset,
+    cloud
 }: VaultSettingsProps) {
     const [newTag, setNewTag] = useState('');
 
@@ -74,6 +78,8 @@ export default function VaultSettings({
                     </Button>
                 </section>
             )}
+
+            <VaultCloudSync cloud={cloud} />
 
             <section className="space-y-3 mb-6">
                 <div className="flex items-center gap-2 text-sm font-medium text-surface-100">

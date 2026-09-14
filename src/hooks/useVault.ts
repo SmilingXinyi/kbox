@@ -1,4 +1,4 @@
-import {useEffect, useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import type {
     ApiKeyItem,
     LockBehavior,
@@ -7,6 +7,7 @@ import type {
     VaultMetadata,
     VaultState
 } from '../types/vault';
+import type {CloudVaultSnapshot} from '../types/cloudSync';
 import {decryptMasterKey, deriveKeyFromPin, deriveKeyFromWebAuthnPrf, hexToArrayBuffer} from '../lib/crypto';
 import {clearVaultStorage, getEncryptedItemsFromDB, saveEncryptedItemsToDB} from '../lib/indexedDB';
 import {STORAGE_KEYS} from '../lib/vaultStorageKeys';
@@ -24,7 +25,15 @@ import {getWebAuthnAssertion} from '../lib/webauthn';
 import {isBiometricSimulatorEnabled} from '../lib/biometricSimulator';
 import {useAutoLock} from './useAutoLock';
 
-export function useVault() {
+type UseVaultOptions = {
+    onItemsPersisted?: () => void;
+};
+
+export function useVault(options: UseVaultOptions = {}) {
+    const onItemsPersistedRef = useRef(options.onItemsPersisted);
+    useEffect(() => {
+        onItemsPersistedRef.current = options.onItemsPersisted;
+    }, [options.onItemsPersisted]);
     const [vaultState, setVaultState] = useState<VaultState>('loading');
     const [metadata, setMetadata] = useState<VaultMetadata | null>(null);
     const [masterKey, setMasterKey] = useState<string | null>(null);
@@ -96,19 +105,53 @@ export function useVault() {
         saveCommonTags(tags);
     };
 
-    const persistItems = async (plainItems: ApiKeyItem[], keyHex: string) => {
+    const persistItems = async (plainItems: ApiKeyItem[], keyHex: string, notifyCloud = true) => {
         const encryptedItems = await serializeAndEncryptItems(plainItems, keyHex);
         await saveEncryptedItemsToDB(encryptedItems);
         setItems(plainItems);
+        if (notifyCloud) {
+            onItemsPersistedRef.current?.();
+        }
     };
 
     const completeSetup = async (masterKeyHex: string, meta: VaultMetadata) => {
         saveVaultMetadata(meta);
         setMetadata(meta);
         setMasterKey(masterKeyHex);
-        await persistItems([], masterKeyHex);
+        await persistItems([], masterKeyHex, false);
         setVaultState('unlocked');
         setError(null);
+    };
+
+    const applyCloudSnapshot = async (snapshot: CloudVaultSnapshot) => {
+        saveVaultMetadata(snapshot.metadata);
+        saveLockBehavior(snapshot.lockBehavior);
+        saveCommonTags(snapshot.commonTags);
+        await saveEncryptedItemsToDB(snapshot.items);
+
+        setMetadata(snapshot.metadata);
+        setLockBehaviorState(snapshot.lockBehavior);
+        setCommonTagsState(snapshot.commonTags);
+        setRevealedKeys({});
+        setCopiedKeyId(null);
+        setPendingAction(null);
+        setShowUnlockModal(false);
+        setError(null);
+
+        if (masterKey) {
+            try {
+                const plainItems = await decryptItemsInMemory(snapshot.items, masterKey);
+                setItems(plainItems);
+            } catch (e) {
+                console.warn('Cloud vault does not match the in-memory master key; locking.', e);
+                setMasterKey(null);
+                setItems(snapshot.items);
+            }
+        } else {
+            setItems(snapshot.items);
+        }
+
+        setVaultState('unlocked');
     };
 
     /** Restore from an encrypted recovery file (new PIN metadata + plaintext items). */
@@ -413,6 +456,7 @@ export function useVault() {
         commonTags,
         setCommonTags,
         completeSetup,
+        applyCloudSnapshot,
         restoreFromBackup,
         unlockWithPin,
         unlockWithWebAuthn,

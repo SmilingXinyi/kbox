@@ -1,7 +1,8 @@
 import {useState} from 'react';
 import {motion} from 'motion/react';
-import {ChevronRight, FileKey, Fingerprint, Key, Lock, RefreshCw} from 'lucide-react';
+import {ChevronRight, Cloud, FileKey, Fingerprint, Key, Lock, RefreshCw} from 'lucide-react';
 import type {ApiKeyItem, VaultMetadata, WebAuthnKeySource} from '../../types/vault';
+import type {UseCloudSyncReturn} from '../../hooks/useCloudSync';
 import {
     deriveKeyFromPin,
     deriveKeyFromWebAuthnPrf,
@@ -20,6 +21,7 @@ import {
 import {isBiometricSimulatorEnabled} from '../../lib/biometricSimulator';
 import BiometricSimulator from './BiometricSimulator';
 import VaultRestore from './VaultBackup';
+import VaultCloudSync from './VaultCloudSync';
 import Alert from '../ui/Alert';
 import Button from '../ui/Button';
 import TextField from '../ui/TextField';
@@ -27,10 +29,11 @@ import TextField from '../ui/TextField';
 type VaultSetupProps = {
     onInitialized: (masterKeyHex: string, metadata: VaultMetadata) => Promise<void>;
     onRestored: (masterKeyHex: string, metadata: VaultMetadata, items: ApiKeyItem[]) => Promise<void>;
+    cloud: UseCloudSyncReturn;
 };
 
-export default function VaultSetup({onInitialized, onRestored}: VaultSetupProps) {
-    const [mode, setMode] = useState<'setup' | 'restore'>('setup');
+export default function VaultSetup({onInitialized, onRestored, cloud}: VaultSetupProps) {
+    const [mode, setMode] = useState<'setup' | 'restore' | 'cloud'>('setup');
     const [username, setUsername] = useState('vault-owner');
     const [pin, setPin] = useState('');
     const [confirmPin, setConfirmPin] = useState('');
@@ -185,6 +188,39 @@ export default function VaultSetup({onInitialized, onRestored}: VaultSetupProps)
             'simulated'
         );
     };
+
+    if (mode === 'cloud') {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-full p-4 safe-pt safe-pb overflow-y-auto overscroll-y-contain">
+                <motion.div
+                    initial={{opacity: 0, y: 16}}
+                    animate={{opacity: 1, y: 0}}
+                    transition={{duration: 0.35, ease: [0.23, 1, 0.32, 1]}}
+                    className="w-full max-w-md overflow-hidden bg-surface-900 border border-surface-700 rounded-2xl"
+                >
+                    <div className="h-1.5 hazard-stripe" aria-hidden />
+                    <div className="p-5 sm:p-6">
+                        <div className="flex flex-col items-center mb-6 text-center">
+                            <div className="p-3 bg-accent-muted border border-accent/30 rounded-xl mb-3 text-accent">
+                                <Cloud className="w-8 h-8" aria-hidden />
+                            </div>
+                            <h1 className="font-display text-xl font-semibold tracking-tight text-surface-100">
+                                Pull from a cloud drive
+                            </h1>
+                            <p className="text-xs text-surface-400 mt-1.5 max-w-xs leading-relaxed">
+                                Choose Google Drive or OneDrive. The file stays encrypted; unlock with your existing PIN
+                                after the pull.
+                            </p>
+                        </div>
+                        <VaultCloudSync cloud={cloud} variant="setup" />
+                        <Button type="button" variant="ghost" fullWidth onClick={() => setMode('setup')}>
+                            Back to setup
+                        </Button>
+                    </div>
+                </motion.div>
+            </div>
+        );
+    }
 
     if (mode === 'restore') {
         return (
@@ -360,6 +396,14 @@ export default function VaultSetup({onInitialized, onRestored}: VaultSetupProps)
                         >
                             <FileKey className="w-3.5 h-3.5" aria-hidden />
                             Restore from recovery file
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setMode('cloud')}
+                            className="w-full inline-flex items-center justify-center gap-1.5 text-xs text-surface-400 hover:text-surface-200 py-2 cursor-pointer pressable"
+                        >
+                            <Cloud className="w-3.5 h-3.5" aria-hidden />
+                            Pull from Google Drive or OneDrive
                         </button>
                     </form>
                 </div>

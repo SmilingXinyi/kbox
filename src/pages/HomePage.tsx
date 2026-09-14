@@ -1,9 +1,10 @@
-import {useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import {AnimatePresence, motion} from 'motion/react';
 import {CheckCircle, RefreshCw, Search, Sparkles} from 'lucide-react';
 import {useVault} from '../hooks/useVault';
 import {usePWA} from '../hooks/usePWA';
 import {useWebRTCSync} from '../hooks/useWebRTCSync';
+import {useCloudSync} from '../hooks/useCloudSync';
 import type {ApiKeyItem, ResidualUnlockResult} from '../types/vault';
 import VaultSetup from '../components/vault/VaultSetup';
 import VaultUnlock from '../components/vault/VaultUnlock';
@@ -19,8 +20,18 @@ import Alert from '../components/ui/Alert';
 import Button from '../components/ui/Button';
 
 export default function HomePage() {
-    const vault = useVault();
+    const persistNotifier = useRef<() => void>(() => {});
+    const vault = useVault({
+        onItemsPersisted: () => persistNotifier.current()
+    });
     const pwa = usePWA();
+    const cloud = useCloudSync({
+        vaultReady: vault.vaultState === 'unlocked',
+        onApplySnapshot: vault.applyCloudSnapshot
+    });
+    useEffect(() => {
+        persistNotifier.current = cloud.schedulePush;
+    }, [cloud.schedulePush]);
     const sync = useWebRTCSync({
         localItems: vault.masterKey ? vault.items : [],
         onReplaceItems: vault.replaceAllItems
@@ -125,7 +136,11 @@ export default function HomePage() {
                             exit={{opacity: 0}}
                             className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain"
                         >
-                            <VaultSetup onInitialized={vault.completeSetup} onRestored={vault.restoreFromBackup} />
+                            <VaultSetup
+                                onInitialized={vault.completeSetup}
+                                onRestored={vault.restoreFromBackup}
+                                cloud={cloud}
+                            />
                         </motion.div>
                     )}
 
@@ -163,6 +178,22 @@ export default function HomePage() {
                                         }
                                     >
                                         {vault.error}
+                                    </Alert>
+                                )}
+                                {cloud.error && (
+                                    <Alert
+                                        tone="error"
+                                        action={
+                                            <button
+                                                type="button"
+                                                onClick={cloud.clearError}
+                                                className="underline cursor-pointer pressable"
+                                            >
+                                                Dismiss
+                                            </button>
+                                        }
+                                    >
+                                        {cloud.error}
                                     </Alert>
                                 )}
 
@@ -284,6 +315,7 @@ export default function HomePage() {
                     vault.setShowUnlockModal(true);
                 }}
                 onReset={vault.resetVault}
+                cloud={cloud}
             />
 
             <VaultSync
