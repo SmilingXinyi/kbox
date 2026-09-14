@@ -13,6 +13,7 @@ No cloud account. Secrets are encrypted on-device (PIN + optional WebAuthn PRF).
 - **Unlock** — PIN (PBKDF2 600k) or WebAuthn; browse labels/tags while locked
 - **Local storage** — IndexedDB (+ localStorage backup); no vault server
 - **Optional sync** — QR invite (PeerJS id + session key) → WebRTC; vault payloads AES-GCM encrypted
+- **Cloud drive** — optional Google Drive / OneDrive: one AES-GCM blob of the whole vault (not per-field). Recovery `.kboxbackup` files stay on-device and are never uploaded.
 
 > Sync invites carry a one-time session key. Treat the QR / invite string like a password. Vault items are encrypted with AES-GCM before leaving the device (in addition to WebRTC DTLS).
 
@@ -31,25 +32,28 @@ Open the Vite URL (usually `http://localhost:5173`). Production: `pnpm build` �
 
 ## Features
 
-|           |                                                                           |
-| --------- | ------------------------------------------------------------------------- |
-| **Vault** | Setup (owner, PIN 4–12, optional WebAuthn), unlock, auto-lock, full reset |
-| **Keys**  | CRUD with unique label, tags, description, multi-line secrets             |
-| **Find**  | Search label / tag / description / secret; filter by tag                  |
-| **Sync**  | PeerJS + WebRTC; QR invite with AES-GCM session key                       |
-| **PWA**   | Installable; service worker caches static assets only                     |
+|           |                                                                                          |
+| --------- | ---------------------------------------------------------------------------------------- |
+| **Vault** | Setup (owner, PIN 6–12, optional WebAuthn), unlock, auto-lock, full reset                |
+| **Keys**  | CRUD with unique label, tags, description, multi-line secrets                            |
+| **Find**  | Search label / tag / description / secret; filter by tag                                 |
+| **Sync**  | PeerJS + WebRTC; QR invite with AES-GCM session key                                      |
+| **Cloud** | Google Drive / OneDrive; whole-file AES-GCM blob; push on key changes; pull after unlock |
+| **PWA**   | Installable; service worker caches static assets only                                    |
 
 ## Security
 
 ```text
 PIN ──PBKDF2(600k, SHA-256)──► KEK ──AES-GCM──► master key
 WebAuthn PRF ──HKDF──► KEK ──AES-GCM──► master key
-Master key ──AES-GCM──► each secret value
+Master key ──AES-GCM──► each secret value (local IndexedDB)
+Master key ──AES-GCM──► whole vault JSON (cloud drive envelope)
 ```
 
-| Encrypted                          | Plaintext (by design)                               |
-| ---------------------------------- | --------------------------------------------------- |
-| Secret values + wrapped master key | Labels, tags, descriptions (browsable while locked) |
+| Encrypted                                      | Plaintext (by design)                               |
+| ---------------------------------------------- | --------------------------------------------------- |
+| Secret values + wrapped master key (local)     | Labels, tags, descriptions (browsable while locked) |
+| Entire vault payload (Google Drive / OneDrive) | Envelope `updatedAt` only, for last-write-wins      |
 
 **Limits:** client-only WebAuthn (no server attestation); BiometricSimulator is DEV-only fixed material — never enable in production (`VITE_ENABLE_BIOMETRIC_SIMULATOR`).
 
@@ -66,7 +70,7 @@ Report crypto/vault issues privately (e.g. GitHub Security Advisory), not as pub
 | `pnpm test`                 | Cypress component tests                |
 | `pnpm test:dual-sync`       | Dual-browser WebRTC smoke (Playwright) |
 
-Optional env (copy `.env.example` → `.env.local`): `VITE_ENABLE_BIOMETRIC_SIMULATOR=true` for non-DEV simulator (preview sandboxes only).
+Optional env (copy `.env.example` → `.env.local`): `VITE_ENABLE_BIOMETRIC_SIMULATOR=true` for non-DEV simulator (preview sandboxes only). For cloud drive sync, set `VITE_GOOGLE_DRIVE_CLIENT_ID` and/or `VITE_ONEDRIVE_CLIENT_ID` (OAuth redirect `{origin}{base}/?kbox_cloud_oauth=1`).
 
 **Stack:** React 19 · React Router 8 · Vite 8 · TypeScript · Tailwind v4 · Web Crypto / WebAuthn · PeerJS  
 **Conventions:** [AGENTS.md](./AGENTS.md) · design notes in [`docs/requirements/`](./docs/requirements/)
