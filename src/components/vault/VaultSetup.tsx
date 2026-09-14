@@ -200,18 +200,6 @@ export default function VaultSetup({onInitialized, onRestored, cloud}: VaultSetu
                 >
                     <div className="h-1.5 hazard-stripe" aria-hidden />
                     <div className="p-5 sm:p-6">
-                        <div className="flex flex-col items-center mb-6 text-center">
-                            <div className="p-3 bg-accent-muted border border-accent/30 rounded-xl mb-3 text-accent">
-                                <Cloud className="w-8 h-8" aria-hidden />
-                            </div>
-                            <h1 className="font-display text-xl font-semibold tracking-tight text-surface-100">
-                                Pull from a cloud drive
-                            </h1>
-                            <p className="text-xs text-surface-400 mt-1.5 max-w-xs leading-relaxed">
-                                Choose Google Drive or OneDrive. The file stays encrypted; unlock with your existing PIN
-                                after the pull.
-                            </p>
-                        </div>
                         <VaultCloudSync cloud={cloud} variant="setup" />
                         <Button type="button" variant="ghost" fullWidth onClick={() => setMode('setup')}>
                             Back to setup

@@ -45,7 +45,11 @@ export default function VaultCloudSync({cloud, variant = 'settings'}: VaultCloud
         <section className="space-y-3 mb-6">
             <div className="flex items-center gap-2 text-sm font-medium text-surface-100">
                 <Cloud className="w-4 h-4 text-accent" aria-hidden />
-                <h3>{variant === 'setup' ? 'Pull from a cloud drive' : 'Cloud drive'}</h3>
+                {variant === 'setup' ? (
+                    <h1 className="font-display text-xl font-semibold tracking-tight">Pull from a cloud drive</h1>
+                ) : (
+                    <h3>Cloud drive</h3>
+                )}
             </div>
             <p className="text-[11px] text-surface-400 leading-relaxed">
                 {variant === 'setup'
