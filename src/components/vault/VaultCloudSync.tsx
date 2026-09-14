@@ -147,7 +147,7 @@ export default function VaultCloudSync({cloud, variant = 'settings', isUnlocked 
                     {cloud.providers.map(provider => (
                         <Button
                             key={`pull-${provider.id}`}
-                            variant={variant === 'setup' ? 'primary' : 'secondary'}
+                            variant={variant === 'setup' && provider.configured ? 'primary' : 'secondary'}
                             onClick={() => handlePull(provider.id)}
                             disabled={busy || !provider.configured || !pinReady}
                         >
