@@ -26,7 +26,12 @@ export default function HomePage() {
     });
     const pwa = usePWA();
     const cloud = useCloudSync({
-        vaultReady: vault.vaultState === 'unlocked',
+        vaultUnlocked: !!vault.masterKey,
+        masterKeyHex: vault.masterKey,
+        items: vault.masterKey ? vault.items : [],
+        metadata: vault.metadata,
+        lockBehavior: vault.lockBehavior,
+        commonTags: vault.commonTags,
         onApplySnapshot: vault.applyCloudSnapshot
     });
     useEffect(() => {

@@ -1,122 +1,149 @@
 import type {ApiKeyItem, LockBehavior, VaultMetadata} from '../../types/vault';
-import {CLOUD_VAULT_FORMAT, CLOUD_VAULT_VERSION, type CloudVaultSnapshot} from '../../types/cloudSync';
-import {getEncryptedItemsFromDB, saveEncryptedItemsToDB} from '../indexedDB';
 import {
-    loadCommonTags,
-    loadLockBehavior,
-    loadVaultMetadata,
-    saveCommonTags,
-    saveLockBehavior,
-    saveVaultMetadata
-} from '../vaultMigration';
+    CLOUD_VAULT_FORMAT,
+    CLOUD_VAULT_VERSION,
+    type CloudPushContext,
+    type CloudVaultFile,
+    type CloudVaultSnapshot
+} from '../../types/cloudSync';
+import {decryptDatabase, decryptMasterKey, deriveKeyFromPin, encryptDatabase} from '../crypto';
+import {isSyncPayloadValid, toSyncPayload} from '../syncPayload';
 
 const LOCK_BEHAVIORS: LockBehavior[] = ['always', 'delay-30s', 'delay-1m', 'delay-5m', 'once'];
 
-function isVaultMetadata(value: unknown): value is VaultMetadata {
+type CloudVaultPayload = {
+    items: ApiKeyItem[];
+    lockBehavior: LockBehavior;
+    commonTags: string[];
+};
+
+export function portablePinMetadata(metadata: VaultMetadata): VaultMetadata {
+    return {
+        isInitialized: true,
+        hasWebAuthn: false,
+        salt: metadata.salt,
+        pinIv: metadata.pinIv,
+        encryptedMasterKeyWithPin: metadata.encryptedMasterKeyWithPin
+    };
+}
+
+export function isCloudVaultFile(value: unknown): value is CloudVaultFile {
     if (!value || typeof value !== 'object') return false;
-    const meta = value as VaultMetadata;
+    const file = value as CloudVaultFile;
     return (
-        meta.isInitialized === true &&
-        typeof meta.salt === 'string' &&
-        meta.salt.length > 0 &&
-        typeof meta.pinIv === 'string' &&
-        meta.pinIv.length > 0 &&
-        typeof meta.encryptedMasterKeyWithPin === 'string' &&
-        meta.encryptedMasterKeyWithPin.length > 0 &&
-        typeof meta.hasWebAuthn === 'boolean'
+        file.format === CLOUD_VAULT_FORMAT &&
+        file.version === CLOUD_VAULT_VERSION &&
+        typeof file.updatedAt === 'string' &&
+        file.updatedAt.length > 0 &&
+        typeof file.salt === 'string' &&
+        file.salt.length > 0 &&
+        typeof file.pinIv === 'string' &&
+        file.pinIv.length > 0 &&
+        typeof file.encryptedMasterKeyWithPin === 'string' &&
+        file.encryptedMasterKeyWithPin.length > 0 &&
+        typeof file.iv === 'string' &&
+        file.iv.length > 0 &&
+        typeof file.ciphertext === 'string' &&
+        file.ciphertext.length > 0
     );
 }
 
-function isEncryptedItem(value: unknown): value is ApiKeyItem {
-    if (!value || typeof value !== 'object') return false;
-    const item = value as ApiKeyItem;
-    if (typeof item.id !== 'string' || typeof item.label !== 'string' || !Array.isArray(item.keys)) {
-        return false;
-    }
-    return item.keys.every(
-        key =>
-            key &&
-            typeof key === 'object' &&
-            typeof key.id === 'string' &&
-            typeof key.label === 'string' &&
-            (key.value === undefined || typeof key.value === 'string') &&
-            (key.encryptedValue === undefined || typeof key.encryptedValue === 'string') &&
-            (key.iv === undefined || typeof key.iv === 'string')
-    );
-}
-
-function stripPlaintextValues(items: ApiKeyItem[]): ApiKeyItem[] {
-    return items.map(item => ({
-        ...item,
-        keys: item.keys.map(key => ({
-            ...key,
-            value: ''
-        }))
-    }));
-}
-
-export function isCloudVaultSnapshot(value: unknown): value is CloudVaultSnapshot {
-    if (!value || typeof value !== 'object') return false;
-    const snapshot = value as CloudVaultSnapshot;
-    return (
-        snapshot.format === CLOUD_VAULT_FORMAT &&
-        snapshot.version === CLOUD_VAULT_VERSION &&
-        typeof snapshot.updatedAt === 'string' &&
-        snapshot.updatedAt.length > 0 &&
-        isVaultMetadata(snapshot.metadata) &&
-        Array.isArray(snapshot.items) &&
-        snapshot.items.every(isEncryptedItem) &&
-        LOCK_BEHAVIORS.includes(snapshot.lockBehavior) &&
-        Array.isArray(snapshot.commonTags) &&
-        snapshot.commonTags.every(tag => typeof tag === 'string')
-    );
-}
-
-export function parseCloudVaultSnapshot(raw: string): CloudVaultSnapshot {
+export function parseCloudVaultFile(raw: string): CloudVaultFile {
     let parsed: unknown;
     try {
         parsed = JSON.parse(raw) as unknown;
     } catch {
         throw new Error('Cloud vault file is not valid JSON.');
     }
-    if (!isCloudVaultSnapshot(parsed)) {
+    if (!isCloudVaultFile(parsed)) {
         throw new Error('Invalid or unsupported cloud vault format.');
     }
-    return {
-        ...parsed,
-        items: stripPlaintextValues(parsed.items)
-    };
+    return parsed;
 }
 
-export function serializeCloudVaultSnapshot(snapshot: CloudVaultSnapshot): string {
-    const safe: CloudVaultSnapshot = {
-        ...snapshot,
-        items: stripPlaintextValues(snapshot.items)
-    };
-    return JSON.stringify(safe);
+export function serializeCloudVaultFile(file: CloudVaultFile): string {
+    return JSON.stringify(file);
 }
 
-export async function readLocalCloudSnapshot(updatedAt: string): Promise<CloudVaultSnapshot | null> {
-    const metadata = loadVaultMetadata();
-    if (!metadata) return null;
+function isCloudVaultPayload(value: unknown): value is CloudVaultPayload {
+    if (!value || typeof value !== 'object') return false;
+    const payload = value as CloudVaultPayload;
+    return (
+        isSyncPayloadValid(payload.items) &&
+        LOCK_BEHAVIORS.includes(payload.lockBehavior) &&
+        Array.isArray(payload.commonTags) &&
+        payload.commonTags.every(tag => typeof tag === 'string')
+    );
+}
 
-    const items = (await getEncryptedItemsFromDB()) ?? [];
+export async function createCloudVaultFile(context: CloudPushContext, updatedAt: string): Promise<CloudVaultFile> {
+    const metadata = portablePinMetadata(context.metadata);
+    const payload: CloudVaultPayload = {
+        items: toSyncPayload(context.items),
+        lockBehavior: context.lockBehavior,
+        commonTags: context.commonTags
+    };
+    const encrypted = await encryptDatabase(JSON.stringify(payload), context.masterKeyHex);
+
     return {
         format: CLOUD_VAULT_FORMAT,
         version: CLOUD_VAULT_VERSION,
         updatedAt,
-        metadata,
-        items: stripPlaintextValues(items),
-        lockBehavior: loadLockBehavior(),
-        commonTags: loadCommonTags()
+        salt: metadata.salt,
+        pinIv: metadata.pinIv,
+        encryptedMasterKeyWithPin: metadata.encryptedMasterKeyWithPin,
+        iv: encrypted.iv,
+        ciphertext: encrypted.ciphertext
     };
 }
 
-export async function writeLocalCloudSnapshot(snapshot: CloudVaultSnapshot): Promise<void> {
-    saveVaultMetadata(snapshot.metadata);
-    saveLockBehavior(snapshot.lockBehavior);
-    saveCommonTags(snapshot.commonTags);
-    await saveEncryptedItemsToDB(stripPlaintextValues(snapshot.items));
+async function decryptPayload(file: CloudVaultFile, masterKeyHex: string): Promise<CloudVaultPayload> {
+    try {
+        const json = await decryptDatabase(file.ciphertext, file.iv, masterKeyHex);
+        const parsed: unknown = JSON.parse(json);
+        if (!isCloudVaultPayload(parsed)) {
+            throw new Error('Cloud vault payload is corrupted.');
+        }
+        return parsed;
+    } catch (e) {
+        if (e instanceof Error && e.message.includes('corrupted')) {
+            throw e;
+        }
+        throw new Error('Failed to decrypt cloud vault. PIN or key may be wrong.', {cause: e});
+    }
+}
+
+export async function decryptCloudVaultFile(
+    file: CloudVaultFile,
+    secret: {masterKeyHex: string} | {pin: string}
+): Promise<CloudVaultSnapshot> {
+    let masterKeyHex: string;
+    if ('pin' in secret) {
+        try {
+            const kek = await deriveKeyFromPin(secret.pin, file.salt);
+            masterKeyHex = await decryptMasterKey(file.encryptedMasterKeyWithPin, file.pinIv, kek);
+        } catch (e) {
+            throw new Error('Incorrect PIN for this cloud vault.', {cause: e});
+        }
+    } else {
+        masterKeyHex = secret.masterKeyHex;
+    }
+
+    const payload = await decryptPayload(file, masterKeyHex);
+    return {
+        updatedAt: file.updatedAt,
+        masterKeyHex,
+        metadata: portablePinMetadata({
+            isInitialized: true,
+            hasWebAuthn: false,
+            salt: file.salt,
+            pinIv: file.pinIv,
+            encryptedMasterKeyWithPin: file.encryptedMasterKeyWithPin
+        }),
+        items: payload.items,
+        lockBehavior: payload.lockBehavior,
+        commonTags: payload.commonTags
+    };
 }
 
 export function compareIsoTimestamps(left: string, right: string): number {

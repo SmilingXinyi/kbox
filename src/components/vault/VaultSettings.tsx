@@ -79,7 +79,7 @@ export default function VaultSettings({
                 </section>
             )}
 
-            <VaultCloudSync cloud={cloud} />
+            <VaultCloudSync cloud={cloud} isUnlocked={!!masterKey} />
 
             <section className="space-y-3 mb-6">
                 <div className="flex items-center gap-2 text-sm font-medium text-surface-100">

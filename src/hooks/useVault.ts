@@ -127,30 +127,16 @@ export function useVault(options: UseVaultOptions = {}) {
         saveVaultMetadata(snapshot.metadata);
         saveLockBehavior(snapshot.lockBehavior);
         saveCommonTags(snapshot.commonTags);
-        await saveEncryptedItemsToDB(snapshot.items);
-
         setMetadata(snapshot.metadata);
         setLockBehaviorState(snapshot.lockBehavior);
         setCommonTagsState(snapshot.commonTags);
+        setMasterKey(snapshot.masterKeyHex);
         setRevealedKeys({});
         setCopiedKeyId(null);
         setPendingAction(null);
         setShowUnlockModal(false);
         setError(null);
-
-        if (masterKey) {
-            try {
-                const plainItems = await decryptItemsInMemory(snapshot.items, masterKey);
-                setItems(plainItems);
-            } catch (e) {
-                console.warn('Cloud vault does not match the in-memory master key; locking.', e);
-                setMasterKey(null);
-                setItems(snapshot.items);
-            }
-        } else {
-            setItems(snapshot.items);
-        }
-
+        await persistItems(snapshot.items, snapshot.masterKeyHex, false);
         setVaultState('unlocked');
     };
 

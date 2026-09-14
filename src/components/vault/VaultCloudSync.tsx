@@ -1,12 +1,16 @@
+import {useState} from 'react';
 import {Cloud, CloudDownload, Loader2, Unplug} from 'lucide-react';
 import type {CloudProviderId} from '../../types/cloudSync';
 import type {UseCloudSyncReturn} from '../../hooks/useCloudSync';
+import {PIN_MAX_LENGTH, PIN_MIN_LENGTH} from '../../lib/crypto';
 import Alert from '../ui/Alert';
 import Button from '../ui/Button';
+import TextField from '../ui/TextField';
 
 type VaultCloudSyncProps = {
     cloud: UseCloudSyncReturn;
     variant?: 'settings' | 'setup';
+    isUnlocked?: boolean;
 };
 
 function formatStamp(iso: string | null): string {
@@ -23,20 +27,23 @@ function statusLabel(status: UseCloudSyncReturn['status']): string | null {
     return null;
 }
 
-export default function VaultCloudSync({cloud, variant = 'settings'}: VaultCloudSyncProps) {
+export default function VaultCloudSync({cloud, variant = 'settings', isUnlocked = false}: VaultCloudSyncProps) {
+    const [pin, setPin] = useState('');
     const busy = cloud.isBusy;
     const connected = cloud.session;
     const connectedProvider = cloud.providers.find(provider => provider.id === connected?.provider);
     const anyConfigured = cloud.providers.some(provider => provider.configured);
+    const needsPin = !isUnlocked;
+    const pinReady = !needsPin || pin.length >= PIN_MIN_LENGTH;
 
     const handlePull = (id: CloudProviderId) => {
-        void cloud.pull(id).catch(() => {
+        void cloud.pull(id, needsPin ? {pin} : undefined).catch(() => {
             // Error is surfaced via cloud.error.
         });
     };
 
     const handleConnect = (id: CloudProviderId) => {
-        void cloud.connect(id).catch(() => {
+        void cloud.connect(id, needsPin ? {pin} : undefined).catch(() => {
             // Error is surfaced via cloud.error.
         });
     };
@@ -53,8 +60,8 @@ export default function VaultCloudSync({cloud, variant = 'settings'}: VaultCloud
             </div>
             <p className="text-[11px] text-surface-400 leading-relaxed">
                 {variant === 'setup'
-                    ? 'Authorize Google Drive or OneDrive and pull the encrypted vault. Unlock afterwards with the same PIN. Biometrics stay on each device.'
-                    : 'Key changes push to the connected drive. On launch, kbox pulls once if this device is still authorized. The drive only stores the encrypted vault.'}
+                    ? 'Authorize a drive, then enter the vault PIN to decrypt the whole-file blob. Recovery files stay local and are never uploaded. Biometrics stay on each device.'
+                    : 'Key changes push one AES-GCM blob (labels and secrets inside the ciphertext). On unlock, kbox pulls once if this device is still authorized. Recovery files are separate and never uploaded.'}
             </p>
 
             {!anyConfigured && (
@@ -85,6 +92,21 @@ export default function VaultCloudSync({cloud, variant = 'settings'}: VaultCloud
                     <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden />
                     {statusLabel(cloud.status)}
                 </p>
+            )}
+
+            {needsPin && (
+                <TextField
+                    label="Vault PIN"
+                    aria-label="Vault PIN"
+                    type="password"
+                    inputMode="numeric"
+                    autoComplete="current-password"
+                    maxLength={PIN_MAX_LENGTH}
+                    value={pin}
+                    onChange={e => setPin(e.target.value)}
+                    placeholder="PIN used on the source device"
+                    className="[&_input]:font-mono [&_input]:tracking-widest"
+                />
             )}
 
             {variant === 'settings' && connected && (
@@ -127,7 +149,7 @@ export default function VaultCloudSync({cloud, variant = 'settings'}: VaultCloud
                             key={`pull-${provider.id}`}
                             variant={variant === 'setup' ? 'primary' : 'secondary'}
                             onClick={() => handlePull(provider.id)}
-                            disabled={busy || !provider.configured}
+                            disabled={busy || !provider.configured || !pinReady}
                         >
                             <CloudDownload className="w-3.5 h-3.5" aria-hidden />
                             Pull from {provider.label}

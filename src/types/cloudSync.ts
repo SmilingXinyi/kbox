@@ -3,13 +3,32 @@ import type {ApiKeyItem, LockBehavior, VaultMetadata} from './vault';
 export type CloudProviderId = 'google-drive' | 'onedrive';
 
 export const CLOUD_VAULT_FORMAT = 'kbox-cloud-vault' as const;
-export const CLOUD_VAULT_VERSION = 1 as const;
+export const CLOUD_VAULT_VERSION = 2 as const;
 
-/** Encrypted-at-rest vault blob stored on the user's drive. */
-export type CloudVaultSnapshot = {
+/** On-drive envelope: PIN wrap + a single AES-GCM blob. No plaintext vault fields. */
+export type CloudVaultFile = {
     format: typeof CLOUD_VAULT_FORMAT;
     version: typeof CLOUD_VAULT_VERSION;
     updatedAt: string;
+    salt: string;
+    pinIv: string;
+    encryptedMasterKeyWithPin: string;
+    iv: string;
+    ciphertext: string;
+};
+
+/** Decrypted vault used to apply a cloud copy locally. */
+export type CloudVaultSnapshot = {
+    updatedAt: string;
+    masterKeyHex: string;
+    metadata: VaultMetadata;
+    items: ApiKeyItem[];
+    lockBehavior: LockBehavior;
+    commonTags: string[];
+};
+
+export type CloudPushContext = {
+    masterKeyHex: string;
     metadata: VaultMetadata;
     items: ApiKeyItem[];
     lockBehavior: LockBehavior;

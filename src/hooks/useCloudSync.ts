@@ -1,5 +1,12 @@
 import {useEffect, useRef, useState} from 'react';
-import type {CloudAuthSession, CloudProviderId, CloudTransport, CloudVaultSnapshot} from '../types/cloudSync';
+import type {ApiKeyItem, LockBehavior, VaultMetadata} from '../types/vault';
+import type {
+    CloudAuthSession,
+    CloudProviderId,
+    CloudPushContext,
+    CloudTransport,
+    CloudVaultSnapshot
+} from '../types/cloudSync';
 import {
     clearCloudSyncAuth,
     loadCloudSyncState,
@@ -18,8 +25,12 @@ export type CloudProviderInfo = {
 };
 
 type UseCloudSyncOptions = {
-    /** True once the local vault has finished loading (initialized dashboard). */
-    vaultReady: boolean;
+    vaultUnlocked: boolean;
+    masterKeyHex: string | null;
+    items: ApiKeyItem[];
+    metadata: VaultMetadata | null;
+    lockBehavior: LockBehavior;
+    commonTags: string[];
     onApplySnapshot: (snapshot: CloudVaultSnapshot) => Promise<void>;
     transports?: CloudTransport[];
 };
@@ -39,7 +50,16 @@ function errorMessage(err: unknown, fallback: string): string {
     return fallback;
 }
 
-export function useCloudSync({vaultReady, onApplySnapshot, transports}: UseCloudSyncOptions) {
+export function useCloudSync({
+    vaultUnlocked,
+    masterKeyHex,
+    items,
+    metadata,
+    lockBehavior,
+    commonTags,
+    onApplySnapshot,
+    transports
+}: UseCloudSyncOptions) {
     const resolvedTransports = transports ?? listCloudTransports();
     const transportById = new Map(resolvedTransports.map(transport => [transport.id, transport]));
 
@@ -50,6 +70,7 @@ export function useCloudSync({vaultReady, onApplySnapshot, transports}: UseCloud
 
     const storedRef = useRef(stored);
     const onApplyRef = useRef(onApplySnapshot);
+    const ctxRef = useRef({masterKeyHex, items, metadata, lockBehavior, commonTags});
     const didAutoPullRef = useRef(false);
     const pushTimerRef = useRef<number | null>(null);
     const inFlightRef = useRef(false);
@@ -61,6 +82,10 @@ export function useCloudSync({vaultReady, onApplySnapshot, transports}: UseCloud
     useEffect(() => {
         onApplyRef.current = onApplySnapshot;
     }, [onApplySnapshot]);
+
+    useEffect(() => {
+        ctxRef.current = {masterKeyHex, items, metadata, lockBehavior, commonTags};
+    }, [masterKeyHex, items, metadata, lockBehavior, commonTags]);
 
     useEffect(() => {
         return () => {
@@ -90,14 +115,47 @@ export function useCloudSync({vaultReady, onApplySnapshot, transports}: UseCloud
         persist(patchCloudSyncState({session, ...extra}));
     };
 
+    const pushContext = (): CloudPushContext | null => {
+        const ctx = ctxRef.current;
+        if (!ctx.masterKeyHex || !ctx.metadata) return null;
+        return {
+            masterKeyHex: ctx.masterKeyHex,
+            metadata: ctx.metadata,
+            items: ctx.items,
+            lockBehavior: ctx.lockBehavior,
+            commonTags: ctx.commonTags
+        };
+    };
+
+    const decryptSecret = (pin?: string): {masterKeyHex: string} | {pin: string} | null => {
+        if (ctxRef.current.masterKeyHex) {
+            return {masterKeyHex: ctxRef.current.masterKeyHex};
+        }
+        if (pin && pin.length > 0) {
+            return {pin};
+        }
+        return null;
+    };
+
     const pullWithSession = async (
         transport: CloudTransport,
         session: CloudAuthSession,
-        mode: 'auto' | 'manual'
+        mode: 'auto' | 'manual',
+        pin?: string
     ): Promise<void> => {
+        const secret = decryptSecret(pin);
+        if (!secret) {
+            if (mode === 'manual') {
+                throw new Error('Enter your vault PIN to decrypt the cloud copy.');
+            }
+            setLastResult(`Connected to ${transport.label}. Unlock or enter your PIN to pull.`);
+            return;
+        }
+
         const {result, session: fresh} = await pullVaultFromCloud(transport, session, {
             mode,
-            localRevision: storedRef.current.localRevision
+            localRevision: storedRef.current.localRevision,
+            secret
         });
 
         if (result.status === 'applied') {
@@ -107,9 +165,7 @@ export function useCloudSync({vaultReady, onApplySnapshot, transports}: UseCloud
                 lastPullAt: new Date().toISOString()
             });
             setLastResult(
-                mode === 'manual'
-                    ? `Pulled vault from ${transport.label}. Unlock with your PIN if this is a new device.`
-                    : `Updated from ${transport.label}.`
+                mode === 'manual' ? `Pulled vault from ${transport.label}.` : `Updated from ${transport.label}.`
             );
             return;
         }
@@ -127,7 +183,7 @@ export function useCloudSync({vaultReady, onApplySnapshot, transports}: UseCloud
         setLastResult(`Local vault is already up to date with ${transport.label}.`);
     };
 
-    const connect = async (providerId: CloudProviderId, options?: {pull?: boolean}) => {
+    const connect = async (providerId: CloudProviderId, options?: {pull?: boolean; pin?: string}) => {
         setError(null);
         setLastResult(null);
         setStatus('connecting');
@@ -137,7 +193,7 @@ export function useCloudSync({vaultReady, onApplySnapshot, transports}: UseCloud
             persistSession(session);
             if (options?.pull !== false) {
                 setStatus('pulling');
-                await pullWithSession(transport, session, 'auto');
+                await pullWithSession(transport, session, 'auto', options?.pin);
             } else {
                 setLastResult(`Connected to ${transport.label}.`);
             }
@@ -157,7 +213,7 @@ export function useCloudSync({vaultReady, onApplySnapshot, transports}: UseCloud
         setStatus('idle');
     };
 
-    const pull = async (providerId?: CloudProviderId) => {
+    const pull = async (providerId?: CloudProviderId, options?: {pin?: string}) => {
         setError(null);
         setLastResult(null);
         const requested = providerId ?? storedRef.current.session?.provider;
@@ -177,7 +233,7 @@ export function useCloudSync({vaultReady, onApplySnapshot, transports}: UseCloud
                 persistSession(session);
                 setStatus('pulling');
             }
-            await pullWithSession(transport, session, 'manual');
+            await pullWithSession(transport, session, 'manual', options?.pin);
             setStatus('idle');
         } catch (err) {
             setStatus('idle');
@@ -198,7 +254,7 @@ export function useCloudSync({vaultReady, onApplySnapshot, transports}: UseCloud
             const transport = requireTransport(session.provider);
             const updatedAt = new Date().toISOString();
             persist(patchCloudSyncState({localRevision: updatedAt}));
-            const {result, session: fresh} = await pushVaultToCloud(transport, session, updatedAt);
+            const {result, session: fresh} = await pushVaultToCloud(transport, session, pushContext(), updatedAt);
             if (result.status === 'pushed') {
                 persistSession(fresh, {lastPushAt: updatedAt, localRevision: updatedAt});
                 setLastResult(`Pushed vault to ${transport.label}.`);
@@ -226,7 +282,7 @@ export function useCloudSync({vaultReady, onApplySnapshot, transports}: UseCloud
     };
 
     useEffect(() => {
-        if (!vaultReady || didAutoPullRef.current) return;
+        if (!vaultUnlocked || didAutoPullRef.current) return;
         didAutoPullRef.current = true;
         const session = storedRef.current.session;
         if (!session) return;
@@ -242,9 +298,9 @@ export function useCloudSync({vaultReady, onApplySnapshot, transports}: UseCloud
             .finally(() => {
                 setStatus('idle');
             });
-        // Run once when the vault finishes loading.
+        // Run once after this device is unlocked (master key in memory).
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [vaultReady]);
+    }, [vaultUnlocked]);
 
     const clearError = () => setError(null);
 

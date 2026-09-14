@@ -2,14 +2,16 @@ import type {
     CloudAuthSession,
     CloudPullMode,
     CloudPullResult,
+    CloudPushContext,
     CloudPushResult,
     CloudTransport
 } from '../../types/cloudSync';
 import {
     compareIsoTimestamps,
-    parseCloudVaultSnapshot,
-    readLocalCloudSnapshot,
-    serializeCloudVaultSnapshot
+    createCloudVaultFile,
+    decryptCloudVaultFile,
+    parseCloudVaultFile,
+    serializeCloudVaultFile
 } from './snapshot';
 
 const TOKEN_EXPIRY_SKEW_MS = 60_000;
@@ -27,22 +29,27 @@ export async function withFreshSession(
 export async function pushVaultToCloud(
     transport: CloudTransport,
     session: CloudAuthSession,
+    context: CloudPushContext | null,
     updatedAt: string
 ): Promise<{result: CloudPushResult; session: CloudAuthSession}> {
-    const snapshot = await readLocalCloudSnapshot(updatedAt);
-    if (!snapshot) {
+    if (!context) {
         return {result: {status: 'skipped', reason: 'no-vault'}, session};
     }
 
     const fresh = await withFreshSession(transport, session);
-    await transport.upload(fresh, serializeCloudVaultSnapshot(snapshot));
+    const file = await createCloudVaultFile(context, updatedAt);
+    await transport.upload(fresh, serializeCloudVaultFile(file));
     return {result: {status: 'pushed', updatedAt}, session: fresh};
 }
 
 export async function pullVaultFromCloud(
     transport: CloudTransport,
     session: CloudAuthSession,
-    options: {mode: CloudPullMode; localRevision: string | null}
+    options: {
+        mode: CloudPullMode;
+        localRevision: string | null;
+        secret: {masterKeyHex: string} | {pin: string};
+    }
 ): Promise<{result: CloudPullResult; session: CloudAuthSession}> {
     const fresh = await withFreshSession(transport, session);
     const raw = await transport.download(fresh);
@@ -50,9 +57,9 @@ export async function pullVaultFromCloud(
         return {result: {status: 'empty'}, session: fresh};
     }
 
-    const snapshot = parseCloudVaultSnapshot(raw);
+    const file = parseCloudVaultFile(raw);
     if (options.mode === 'auto' && options.localRevision) {
-        const cmp = compareIsoTimestamps(snapshot.updatedAt, options.localRevision);
+        const cmp = compareIsoTimestamps(file.updatedAt, options.localRevision);
         if (cmp < 0) {
             return {result: {status: 'skipped', reason: 'local-newer'}, session: fresh};
         }
@@ -61,5 +68,6 @@ export async function pullVaultFromCloud(
         }
     }
 
+    const snapshot = await decryptCloudVaultFile(file, options.secret);
     return {result: {status: 'applied', snapshot}, session: fresh};
 }
