@@ -1,25 +1,10 @@
 import type {CloudAuthSession, CloudTransport} from '../../types/cloudSync';
 import {CLOUD_FILE_NAME, googleDriveClientId} from './config';
-import {authorizeWithPkce, refreshOAuthToken, type PkceOAuthConfig} from './oauthPkce';
+import {requestGoogleAccessToken} from './googleIdentity';
 
 const DRIVE_FILES = 'https://www.googleapis.com/drive/v3/files';
 const DRIVE_UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files';
-
-function googlePkceConfig(clientId = googleDriveClientId()): PkceOAuthConfig {
-    if (!clientId) {
-        throw new Error('Save a Google Drive OAuth client ID, then authorize this page.');
-    }
-    return {
-        authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
-        tokenEndpoint: 'https://oauth2.googleapis.com/token',
-        clientId,
-        scopes: ['https://www.googleapis.com/auth/drive.appdata'],
-        extraAuthParams: {
-            access_type: 'offline',
-            include_granted_scopes: 'true'
-        }
-    };
-}
+const DRIVE_APPDATA_SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
 
 async function driveJson<T>(session: CloudAuthSession, url: string, init: RequestInit = {}): Promise<T> {
     const headers = new Headers(init.headers);
@@ -56,30 +41,21 @@ async function findVaultFileId(session: CloudAuthSession): Promise<string | null
 
 async function googleDriveTransportAuthorize(): Promise<CloudAuthSession> {
     const clientId = googleDriveClientId();
-    const tokens = await authorizeWithPkce(googlePkceConfig(clientId));
+    if (!clientId) {
+        throw new Error('Save a Google Drive OAuth client ID, then authorize this page.');
+    }
+    const tokens = await requestGoogleAccessToken(clientId, DRIVE_APPDATA_SCOPE);
     return {
         provider: 'google-drive',
         accessToken: tokens.accessToken,
-        refreshToken: tokens.refreshToken,
         expiresAt: tokens.expiresAt,
         accountLabel: 'Google Drive',
         clientId
     };
 }
 
-async function googleDriveTransportRefresh(session: CloudAuthSession): Promise<CloudAuthSession> {
-    if (!session.refreshToken) {
-        throw new Error('Google Drive session expired. Reconnect the drive.');
-    }
-    const clientId = session.clientId || googleDriveClientId();
-    const tokens = await refreshOAuthToken(googlePkceConfig(clientId), session.refreshToken);
-    return {
-        ...session,
-        accessToken: tokens.accessToken,
-        refreshToken: tokens.refreshToken,
-        expiresAt: tokens.expiresAt,
-        clientId
-    };
+async function googleDriveTransportRefresh(): Promise<CloudAuthSession> {
+    throw new Error('Google Drive access expired. Connect Google Drive again before syncing.');
 }
 
 async function googleDriveTransportUpload(session: CloudAuthSession, body: string): Promise<void> {

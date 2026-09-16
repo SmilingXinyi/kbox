@@ -13,7 +13,7 @@ import {
     patchCloudSyncState,
     type CloudSyncStoredState
 } from '../lib/cloudSync/authStorage';
-import {loadCloudClientId, saveCloudClientId} from '../lib/cloudSync/clientIds';
+import {clearLegacyCloudClientSecrets, loadCloudClientId, saveCloudClientId} from '../lib/cloudSync/clientIds';
 import {pullVaultFromCloud, pushVaultToCloud} from '../lib/cloudSync/engine';
 import {listCloudTransports} from '../lib/cloudSync/transports';
 
@@ -67,12 +67,14 @@ export function useCloudSync({
     const transportById = new Map(resolvedTransports.map(transport => [transport.id, transport]));
 
     const [stored, setStored] = useState<CloudSyncStoredState>(() => loadCloudSyncState());
+    const [ephemeralSession, setEphemeralSession] = useState<CloudAuthSession | null>(null);
     const [status, setStatus] = useState<CloudSyncStatus>('idle');
     const [error, setError] = useState<string | null>(null);
     const [lastResult, setLastResult] = useState<string | null>(null);
     const [, setClientIdsEpoch] = useState(0);
 
     const storedRef = useRef(stored);
+    const sessionRef = useRef<CloudAuthSession | null>(stored.session);
     const onApplyRef = useRef(onApplySnapshot);
     const ctxRef = useRef({masterKeyHex, items, metadata, lockBehavior, commonTags});
     const didAutoPullRef = useRef(false);
@@ -80,8 +82,16 @@ export function useCloudSync({
     const inFlightRef = useRef(false);
 
     useEffect(() => {
+        clearLegacyCloudClientSecrets();
+    }, []);
+
+    useEffect(() => {
         storedRef.current = stored;
     }, [stored]);
+
+    useEffect(() => {
+        sessionRef.current = ephemeralSession ?? stored.session;
+    }, [ephemeralSession, stored.session]);
 
     useEffect(() => {
         onApplyRef.current = onApplySnapshot;
@@ -121,7 +131,10 @@ export function useCloudSync({
     };
 
     const persistSession = (session: CloudAuthSession, extra?: Partial<CloudSyncStoredState>) => {
-        persist(patchCloudSyncState({session, ...extra}));
+        const storedSession = session.provider === 'google-drive' ? null : session;
+        setEphemeralSession(session.provider === 'google-drive' ? session : null);
+        sessionRef.current = session;
+        persist(patchCloudSyncState({session: storedSession, ...extra}));
     };
 
     const pushContext = (): CloudPushContext | null => {
@@ -137,11 +150,11 @@ export function useCloudSync({
     };
 
     const decryptSecret = (pin?: string): {masterKeyHex: string} | {pin: string} | null => {
-        if (ctxRef.current.masterKeyHex) {
-            return {masterKeyHex: ctxRef.current.masterKeyHex};
-        }
         if (pin && pin.length > 0) {
             return {pin};
+        }
+        if (ctxRef.current.masterKeyHex) {
+            return {masterKeyHex: ctxRef.current.masterKeyHex};
         }
         return null;
     };
@@ -216,6 +229,8 @@ export function useCloudSync({
     };
 
     const disconnect = () => {
+        setEphemeralSession(null);
+        sessionRef.current = null;
         persist(clearCloudSyncAuth());
         setError(null);
         setLastResult('Cloud drive disconnected on this device. Files on the drive are unchanged.');
@@ -225,7 +240,7 @@ export function useCloudSync({
     const pull = async (providerId?: CloudProviderId, options?: {pin?: string}) => {
         setError(null);
         setLastResult(null);
-        const requested = providerId ?? storedRef.current.session?.provider;
+        const requested = providerId ?? sessionRef.current?.provider;
         if (!requested) {
             const message = 'Choose a cloud drive first.';
             setError(message);
@@ -235,7 +250,7 @@ export function useCloudSync({
         setStatus('pulling');
         try {
             const transport = requireTransport(requested);
-            let session = storedRef.current.session;
+            let session = sessionRef.current;
             if (!session || session.provider !== requested) {
                 setStatus('connecting');
                 session = await transport.authorize();
@@ -253,7 +268,7 @@ export function useCloudSync({
     };
 
     const pushNow = async () => {
-        const session = storedRef.current.session;
+        const session = sessionRef.current;
         if (!session || inFlightRef.current) return;
 
         inFlightRef.current = true;
@@ -262,7 +277,6 @@ export function useCloudSync({
         try {
             const transport = requireTransport(session.provider);
             const updatedAt = new Date().toISOString();
-            persist(patchCloudSyncState({localRevision: updatedAt}));
             const {result, session: fresh} = await pushVaultToCloud(transport, session, pushContext(), updatedAt);
             if (result.status === 'pushed') {
                 persistSession(fresh, {lastPushAt: updatedAt, localRevision: updatedAt});
@@ -280,7 +294,7 @@ export function useCloudSync({
     };
 
     const schedulePush = () => {
-        if (!storedRef.current.session) return;
+        if (!sessionRef.current) return;
         if (pushTimerRef.current != null) {
             window.clearTimeout(pushTimerRef.current);
         }
@@ -293,7 +307,7 @@ export function useCloudSync({
     useEffect(() => {
         if (!vaultUnlocked || didAutoPullRef.current) return;
         didAutoPullRef.current = true;
-        const session = storedRef.current.session;
+        const session = sessionRef.current;
         if (!session) return;
 
         const transport = transportById.get(session.provider);
@@ -315,7 +329,7 @@ export function useCloudSync({
 
     return {
         providers: providerList(resolvedTransports),
-        session: stored.session,
+        session: ephemeralSession ?? stored.session,
         localRevision: stored.localRevision,
         lastPushAt: stored.lastPushAt,
         lastPullAt: stored.lastPullAt,

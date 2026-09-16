@@ -93,14 +93,16 @@ export default function VaultCloudSync({cloud, variant = 'settings', isUnlocked 
         onedrive: ''
     });
     const [openPanel, setOpenPanel] = useState<CloudProviderId | null>(null);
+    const [restoreProviderId, setRestoreProviderId] = useState<CloudProviderId | null>(null);
     const [formError, setFormError] = useState<string | null>(null);
     const [copiedField, setCopiedField] = useState<'origin' | 'redirect' | null>(null);
 
     const busy = cloud.isBusy;
     const connected = cloud.session;
     const connectedProvider = cloud.providers.find(provider => provider.id === connected?.provider);
-    const needsPin = !isUnlocked;
-    const pinReady = !needsPin || pin.length >= PIN_MIN_LENGTH;
+    const needsPin = variant === 'setup';
+    const cloudVaultPin = pin.trim();
+    const pinReady = cloudVaultPin.length >= PIN_MIN_LENGTH;
     const redirectUri = cloudOAuthRedirectUri();
     const javascriptOrigin = cloudOAuthJavaScriptOrigin();
 
@@ -109,11 +111,11 @@ export default function VaultCloudSync({cloud, variant = 'settings', isUnlocked 
     const prepareClientId = (id: CloudProviderId): boolean => {
         const provider = cloud.providers.find(item => item.id === id);
         if (!provider) return false;
-        const typed = draftIds[id].trim();
+        const typedId = draftIds[id].trim();
         if (provider.configured && openPanel !== id) return true;
 
-        if (typed) {
-            cloud.saveClientId(id, typed);
+        if (typedId) {
+            cloud.saveClientId(id, typedId);
             setOpenPanel(null);
             return true;
         }
@@ -144,7 +146,7 @@ export default function VaultCloudSync({cloud, variant = 'settings', isUnlocked 
             return;
         }
         if (!prepareClientId(id)) return;
-        void cloud.pull(id, needsPin ? {pin} : undefined).catch(() => {
+        void cloud.pull(id, needsPin ? {pin: cloudVaultPin} : undefined).catch(() => {
             // Error is surfaced via cloud.error.
         });
     };
@@ -157,9 +159,30 @@ export default function VaultCloudSync({cloud, variant = 'settings', isUnlocked 
             return;
         }
         if (!prepareClientId(id)) return;
-        void cloud.connect(id, needsPin ? {pin} : undefined).catch(() => {
+        void cloud.connect(id, {pull: false}).catch(() => {
             // Error is surfaced via cloud.error.
         });
+    };
+
+    const handleRestore = (id: CloudProviderId) => {
+        setFormError(null);
+        if (cloudVaultPin.length < PIN_MIN_LENGTH) {
+            setFormError(`Enter the ${PIN_MIN_LENGTH}-${PIN_MAX_LENGTH} character cloud vault PIN to continue.`);
+            return;
+        }
+        if (!prepareClientId(id)) return;
+        if (!window.confirm('Restore the cloud vault? This replaces the vault currently stored on this device.'))
+            return;
+
+        void cloud
+            .pull(id, {pin: cloudVaultPin})
+            .then(() => {
+                setPin('');
+                setRestoreProviderId(null);
+            })
+            .catch(() => {
+                // Error is surfaced via cloud.error.
+            });
     };
 
     const handleCopy = async (field: 'origin' | 'redirect', value: string) => {
@@ -185,7 +208,7 @@ export default function VaultCloudSync({cloud, variant = 'settings', isUnlocked 
             </div>
             <p className="text-[11px] text-surface-400 leading-relaxed">
                 {variant === 'setup'
-                    ? 'Authorize Google Drive or OneDrive in this browser, then enter the vault PIN to decrypt the whole-file blob. Recovery files stay local and are never uploaded. Biometrics stay on each device.'
+                    ? 'Authorize Google Drive or OneDrive in this browser, then enter the cloud vault PIN to restore it. Recovery files stay local and are never uploaded. Biometrics stay on each device.'
                     : 'Authorize a drive in this browser. Key changes push one AES-GCM blob. On unlock, kbox pulls once if this device is still authorized. Recovery files are separate and never uploaded.'}
             </p>
 
@@ -220,15 +243,15 @@ export default function VaultCloudSync({cloud, variant = 'settings', isUnlocked 
 
             {needsPin && (
                 <TextField
-                    label="Vault PIN"
-                    aria-label="Vault PIN"
+                    label="Cloud vault PIN"
+                    aria-label="Cloud vault PIN"
                     type="password"
                     inputMode="numeric"
                     autoComplete="current-password"
                     maxLength={PIN_MAX_LENGTH}
                     value={pin}
                     onChange={e => setPin(e.target.value)}
-                    placeholder="PIN used on the source device"
+                    placeholder="PIN used to unlock the cloud vault"
                     className="[&_input]:font-mono [&_input]:tracking-widest"
                 />
             )}
@@ -252,6 +275,7 @@ export default function VaultCloudSync({cloud, variant = 'settings', isUnlocked 
                 {cloud.providers.map(provider => {
                     const copy = PROVIDER_COPY[provider.id];
                     const fieldsOpen = showAppFields(provider.id);
+                    const restoreOpen = restoreProviderId === provider.id;
                     return (
                         <article
                             key={provider.id}
@@ -319,8 +343,8 @@ export default function VaultCloudSync({cloud, variant = 'settings', isUnlocked 
                                                 >
                                                     {copy.registerLabel}
                                                 </a>{' '}
-                                                app. Google: Web client + Drive API. Microsoft: SPA +
-                                                Files.ReadWrite.AppFolder + offline_access.
+                                                app. Google: Web client + Drive API; only the JavaScript origin is used.
+                                                Microsoft: SPA + Files.ReadWrite.AppFolder + offline_access.
                                             </p>
                                             <CopyableValue
                                                 label="JavaScript origin"
@@ -328,12 +352,14 @@ export default function VaultCloudSync({cloud, variant = 'settings', isUnlocked 
                                                 copied={copiedField === 'origin'}
                                                 onCopy={() => void handleCopy('origin', javascriptOrigin)}
                                             />
-                                            <CopyableValue
-                                                label="Redirect URI"
-                                                value={redirectUri}
-                                                copied={copiedField === 'redirect'}
-                                                onCopy={() => void handleCopy('redirect', redirectUri)}
-                                            />
+                                            {provider.id === 'onedrive' && (
+                                                <CopyableValue
+                                                    label="Redirect URI"
+                                                    value={redirectUri}
+                                                    copied={copiedField === 'redirect'}
+                                                    onCopy={() => void handleCopy('redirect', redirectUri)}
+                                                />
+                                            )}
                                         </div>
                                     </details>
                                     {provider.id === 'google-drive' && (
@@ -384,15 +410,80 @@ export default function VaultCloudSync({cloud, variant = 'settings', isUnlocked 
                                             : `Connect ${provider.label}`}
                                     </Button>
                                 )}
-                                <Button
-                                    variant={variant === 'setup' ? 'primary' : 'secondary'}
-                                    onClick={() => handlePull(provider.id)}
-                                    disabled={busy || !pinReady}
-                                >
-                                    <CloudDownload className="w-3.5 h-3.5" aria-hidden />
-                                    Pull from {provider.label}
-                                </Button>
+                                {(variant === 'setup' || isUnlocked) && (
+                                    <Button
+                                        variant={variant === 'setup' ? 'primary' : 'secondary'}
+                                        onClick={() => handlePull(provider.id)}
+                                        disabled={busy || (needsPin && !pinReady)}
+                                    >
+                                        <CloudDownload className="w-3.5 h-3.5" aria-hidden />
+                                        {variant === 'setup'
+                                            ? `Pull from ${provider.label}`
+                                            : `Pull updates from ${provider.label}`}
+                                    </Button>
+                                )}
                             </div>
+
+                            {variant === 'settings' && (
+                                <div className="border-t border-surface-700 pt-3">
+                                    {!isUnlocked && !restoreOpen && (
+                                        <p className="mb-2 text-[11px] text-surface-400">
+                                            Unlock this device to pull updates, or restore a cloud vault instead.
+                                        </p>
+                                    )}
+                                    {restoreOpen ? (
+                                        <div className="space-y-3">
+                                            <Alert tone="warn">
+                                                Restoring replaces the vault currently stored on this device.
+                                            </Alert>
+                                            <TextField
+                                                label="Cloud vault PIN"
+                                                aria-label={`Cloud vault PIN for ${provider.label}`}
+                                                type="password"
+                                                inputMode="numeric"
+                                                autoComplete="current-password"
+                                                maxLength={PIN_MAX_LENGTH}
+                                                value={pin}
+                                                onChange={e => setPin(e.target.value)}
+                                                placeholder="PIN used to unlock the cloud vault"
+                                                hint="This is only needed when restoring a vault created on another device."
+                                                className="[&_input]:font-mono [&_input]:tracking-widest"
+                                            />
+                                            <div className="flex flex-col gap-2 sm:flex-row">
+                                                <Button
+                                                    variant="danger"
+                                                    onClick={() => handleRestore(provider.id)}
+                                                    disabled={busy || !pinReady}
+                                                >
+                                                    Restore from {provider.label}
+                                                </Button>
+                                                <Button
+                                                    variant="ghost"
+                                                    onClick={() => {
+                                                        setPin('');
+                                                        setRestoreProviderId(null);
+                                                    }}
+                                                    disabled={busy}
+                                                >
+                                                    Cancel restore
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setPin('');
+                                                setRestoreProviderId(provider.id);
+                                            }}
+                                            disabled={busy}
+                                            className="text-[11px] text-surface-400 hover:text-surface-200 disabled:cursor-not-allowed disabled:opacity-50 underline underline-offset-2 cursor-pointer pressable"
+                                        >
+                                            Restore a cloud vault from another device
+                                        </button>
+                                    )}
+                                </div>
+                            )}
                         </article>
                     );
                 })}

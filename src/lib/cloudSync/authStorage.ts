@@ -28,6 +28,7 @@ function isSession(value: unknown): value is CloudAuthSession {
     const session = value as CloudAuthSession;
     return (
         isProviderId(session.provider) &&
+        session.provider !== 'google-drive' &&
         typeof session.accessToken === 'string' &&
         session.accessToken.length > 0 &&
         typeof session.expiresAt === 'number' &&
@@ -43,13 +44,17 @@ export function loadCloudSyncState(): CloudSyncStoredState {
         if (!raw) return EMPTY_STATE;
         const parsed = JSON.parse(raw) as Partial<CloudSyncStoredState>;
         if (parsed.v !== 1) return EMPTY_STATE;
-        return {
+        const state: CloudSyncStoredState = {
             v: 1,
             session: isSession(parsed.session) ? parsed.session : null,
             localRevision: typeof parsed.localRevision === 'string' ? parsed.localRevision : null,
             lastPushAt: typeof parsed.lastPushAt === 'string' ? parsed.lastPushAt : null,
             lastPullAt: typeof parsed.lastPullAt === 'string' ? parsed.lastPullAt : null
         };
+        if ((parsed.session as CloudAuthSession | null)?.provider === 'google-drive') {
+            saveCloudSyncState(state);
+        }
+        return state;
     } catch (e) {
         console.error('Failed to read cloud sync state:', e);
         return EMPTY_STATE;

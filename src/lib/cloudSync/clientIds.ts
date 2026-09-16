@@ -22,16 +22,39 @@ function loadAll(): StoredClients {
         if (!raw) return EMPTY;
         const parsed = JSON.parse(raw) as Partial<StoredClients>;
         if (parsed.v !== 1 || !parsed.ids || typeof parsed.ids !== 'object') return EMPTY;
-        return {
+        const clients: StoredClients = {
             v: 1,
             ids: {
                 'google-drive': sanitize(parsed.ids['google-drive']),
                 onedrive: sanitize(parsed.ids.onedrive)
             }
         };
+        return clients;
     } catch (e) {
         console.error('Failed to read cloud OAuth client IDs:', e);
         return EMPTY;
+    }
+}
+
+/** Removes credentials left by pre-GIS versions without writing during render. */
+export function clearLegacyCloudClientSecrets(): void {
+    try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw) as Partial<StoredClients>;
+        if (parsed.v !== 1 || !parsed.ids || typeof parsed.ids !== 'object' || !('secrets' in parsed)) return;
+        localStorage.setItem(
+            STORAGE_KEY,
+            JSON.stringify({
+                v: 1,
+                ids: {
+                    'google-drive': sanitize(parsed.ids['google-drive']),
+                    onedrive: sanitize(parsed.ids.onedrive)
+                }
+            } satisfies StoredClients)
+        );
+    } catch (e) {
+        console.error('Failed to remove legacy cloud OAuth secrets:', e);
     }
 }
 
@@ -48,7 +71,7 @@ export function loadCloudClientId(provider: CloudProviderId): string {
 export function saveCloudClientId(provider: CloudProviderId, clientId: string): void {
     const trimmed = clientId.trim();
     const next: StoredClients = {
-        v: 1,
+        ...loadAll(),
         ids: {
             ...loadAll().ids,
             [provider]: trimmed || undefined
