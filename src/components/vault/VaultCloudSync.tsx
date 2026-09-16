@@ -100,7 +100,7 @@ export default function VaultCloudSync({cloud, variant = 'settings', isUnlocked 
     const busy = cloud.isBusy;
     const connected = cloud.session;
     const connectedProvider = cloud.providers.find(provider => provider.id === connected?.provider);
-    const needsPin = variant === 'setup';
+    const needsPin = !isUnlocked;
     const cloudVaultPin = pin.trim();
     const pinReady = cloudVaultPin.length >= PIN_MIN_LENGTH;
     const redirectUri = cloudOAuthRedirectUri();
@@ -251,7 +251,7 @@ export default function VaultCloudSync({cloud, variant = 'settings', isUnlocked 
                     maxLength={PIN_MAX_LENGTH}
                     value={pin}
                     onChange={e => setPin(e.target.value)}
-                    placeholder="PIN used to unlock the cloud vault"
+                    placeholder="PIN used on the source device"
                     className="[&_input]:font-mono [&_input]:tracking-widest"
                 />
             )}
@@ -410,27 +410,20 @@ export default function VaultCloudSync({cloud, variant = 'settings', isUnlocked 
                                             : `Connect ${provider.label}`}
                                     </Button>
                                 )}
-                                {(variant === 'setup' || isUnlocked) && (
-                                    <Button
-                                        variant={variant === 'setup' ? 'primary' : 'secondary'}
-                                        onClick={() => handlePull(provider.id)}
-                                        disabled={busy || (needsPin && !pinReady)}
-                                    >
-                                        <CloudDownload className="w-3.5 h-3.5" aria-hidden />
-                                        {variant === 'setup'
-                                            ? `Pull from ${provider.label}`
-                                            : `Pull updates from ${provider.label}`}
-                                    </Button>
-                                )}
+                                <Button
+                                    variant={variant === 'setup' ? 'primary' : 'secondary'}
+                                    onClick={() => handlePull(provider.id)}
+                                    disabled={busy || (needsPin && !pinReady)}
+                                >
+                                    <CloudDownload className="w-3.5 h-3.5" aria-hidden />
+                                    {variant === 'setup'
+                                        ? `Pull from ${provider.label}`
+                                        : `Pull updates from ${provider.label}`}
+                                </Button>
                             </div>
 
                             {variant === 'settings' && (
                                 <div className="border-t border-surface-700 pt-3">
-                                    {!isUnlocked && !restoreOpen && (
-                                        <p className="mb-2 text-[11px] text-surface-400">
-                                            Unlock this device to pull updates, or restore a cloud vault instead.
-                                        </p>
-                                    )}
                                     {restoreOpen ? (
                                         <div className="space-y-3">
                                             <Alert tone="warn">

@@ -72,7 +72,7 @@ Report crypto/vault issues privately (e.g. GitHub Security Advisory), not as pub
 
 Optional env (copy `.env.example` → `.env.local`): `VITE_ENABLE_BIOMETRIC_SIMULATOR=true` for non-DEV simulator (preview sandboxes only).
 
-**Cloud drive (Settings):** Google Drive uses Google Identity Services to issue a short-lived browser access token; no client secret or refresh token is stored. When it expires, connect Google Drive again before syncing. **Pull updates** uses the current unlocked vault; **Restore a cloud vault** asks for the cloud vault PIN and replaces the local vault. Self-hosted origins must be added to the Google Web client; use **Change OAuth app** for a different client. OneDrive still uses PKCE and needs a public SPA client ID plus redirect URI `{origin}{base}/?kbox_cloud_oauth=1` with `Files.ReadWrite.AppFolder` + `offline_access`.
+**Cloud drive (Settings):** Google Drive uses Google Identity Services to issue a short-lived browser access token; no client secret or refresh token is stored. When it expires, connect Google Drive again before syncing. To restore a cloud vault created on another device, enter its Vault PIN before pulling; this replaces the local vault. Self-hosted origins must be added to the Google Web client; use **Change OAuth app** for a different client. OneDrive still uses PKCE and needs a public SPA client ID plus redirect URI `{origin}{base}/?kbox_cloud_oauth=1` with `Files.ReadWrite.AppFolder` + `offline_access`.
 
 **Stack:** React 19 · React Router 8 · Vite 8 · TypeScript · Tailwind v4 · Web Crypto / WebAuthn · PeerJS  
 **Conventions:** [AGENTS.md](./AGENTS.md) · design notes in [`docs/requirements/`](./docs/requirements/)

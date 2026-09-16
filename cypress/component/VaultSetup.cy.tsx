@@ -29,7 +29,7 @@ describe('<VaultSetup />', () => {
         cy.contains('button', 'Pull from Google Drive or OneDrive').click();
         cy.contains('Pull from a cloud drive').scrollIntoView().should('be.visible');
         cy.contains('button', 'Pull from Google Drive').should('be.disabled');
-        cy.get('input[placeholder="PIN used to unlock the cloud vault"]').type('123456');
+        cy.get('input[placeholder="PIN used on the source device"]').type('123456');
         cy.contains('button', 'Pull from Google Drive').click();
         cy.get('@cloudPull').should('have.been.calledWith', 'google-drive');
     });

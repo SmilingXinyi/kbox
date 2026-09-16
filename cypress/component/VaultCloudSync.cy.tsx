@@ -2,7 +2,7 @@ import VaultCloudSync from '../../src/components/vault/VaultCloudSync';
 import {configuredProvider, createMockCloud} from '../support/mockCloud';
 
 function typeCloudPin(pin = '123456') {
-    cy.get('input[placeholder="PIN used to unlock the cloud vault"]').type(pin);
+    cy.get('input[placeholder="PIN used on the source device"]').type(pin);
 }
 
 describe('<VaultCloudSync />', () => {
@@ -31,17 +31,6 @@ describe('<VaultCloudSync />', () => {
         cy.contains('button', 'Connect OneDrive').click();
         cy.get('@cloudConnect').should('have.been.calledWith', 'onedrive');
         cy.contains('Change OAuth app').should('be.visible');
-    });
-
-    it('keeps pull updates separate from a cloud-vault restore while locked', () => {
-        const cloud = createMockCloud();
-        cy.mount(<VaultCloudSync cloud={cloud} variant="settings" />);
-
-        cy.contains('Cloud vault PIN').should('not.exist');
-        cy.contains('Pull updates from Google Drive').should('not.exist');
-        cy.contains('Unlock this device to pull updates').should('be.visible');
-        cy.contains('button', 'Restore a cloud vault from another device').first().click();
-        cy.get('input[aria-label="Cloud vault PIN for Google Drive"]').should('be.visible');
     });
 
     it('shows connected status and disconnect', () => {
