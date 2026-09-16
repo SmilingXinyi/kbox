@@ -13,7 +13,7 @@ No cloud account. Secrets are encrypted on-device (PIN + optional WebAuthn PRF).
 - **Unlock** — PIN (PBKDF2 600k) or WebAuthn; browse labels/tags while locked
 - **Local storage** — IndexedDB (+ localStorage backup); no vault server
 - **Optional sync** — QR invite (PeerJS id + session key) → WebRTC; vault payloads AES-GCM encrypted
-- **Cloud drive** — optional Google Drive / OneDrive: one AES-GCM blob of the whole vault (not per-field). Recovery `.kboxbackup` files stay on-device and are never uploaded.
+- **Cloud drive** — optional Google Drive / OneDrive via in-page OAuth (no env vars): one AES-GCM blob of the whole vault (not per-field). Recovery `.kboxbackup` files stay on-device and are never uploaded.
 
 > Sync invites carry a one-time session key. Treat the QR / invite string like a password. Vault items are encrypted with AES-GCM before leaving the device (in addition to WebRTC DTLS).
 
@@ -32,14 +32,14 @@ Open the Vite URL (usually `http://localhost:5173`). Production: `pnpm build` �
 
 ## Features
 
-|           |                                                                                          |
-| --------- | ---------------------------------------------------------------------------------------- |
-| **Vault** | Setup (owner, PIN 6–12, optional WebAuthn), unlock, auto-lock, full reset                |
-| **Keys**  | CRUD with unique label, tags, description, multi-line secrets                            |
-| **Find**  | Search label / tag / description / secret; filter by tag                                 |
-| **Sync**  | PeerJS + WebRTC; QR invite with AES-GCM session key                                      |
-| **Cloud** | Google Drive / OneDrive; whole-file AES-GCM blob; push on key changes; pull after unlock |
-| **PWA**   | Installable; service worker caches static assets only                                    |
+|           |                                                                                                       |
+| --------- | ----------------------------------------------------------------------------------------------------- |
+| **Vault** | Setup (owner, PIN 6–12, optional WebAuthn), unlock, auto-lock, full reset                             |
+| **Keys**  | CRUD with unique label, tags, description, multi-line secrets                                         |
+| **Find**  | Search label / tag / description / secret; filter by tag                                              |
+| **Sync**  | PeerJS + WebRTC; QR invite with AES-GCM session key                                                   |
+| **Cloud** | Google Drive / OneDrive via in-page OAuth; whole-file AES-GCM blob; push on change; pull after unlock |
+| **PWA**   | Installable; service worker caches static assets only                                                 |
 
 ## Security
 
@@ -70,7 +70,9 @@ Report crypto/vault issues privately (e.g. GitHub Security Advisory), not as pub
 | `pnpm test`                 | Cypress component tests                |
 | `pnpm test:dual-sync`       | Dual-browser WebRTC smoke (Playwright) |
 
-Optional env (copy `.env.example` → `.env.local`): `VITE_ENABLE_BIOMETRIC_SIMULATOR=true` for non-DEV simulator (preview sandboxes only). For cloud drive sync, set `VITE_GOOGLE_DRIVE_CLIENT_ID` and/or `VITE_ONEDRIVE_CLIENT_ID` (OAuth redirect `{origin}{base}/?kbox_cloud_oauth=1`).
+Optional env (copy `.env.example` → `.env.local`): `VITE_ENABLE_BIOMETRIC_SIMULATOR=true` for non-DEV simulator (preview sandboxes only).
+
+**Cloud drive (Settings):** Connect Google Drive authorizes in a popup (kbox ships a public OAuth client ID). OneDrive still needs a public SPA client ID once on this device. Redirect URI is `{origin}{base}/?kbox_cloud_oauth=1`. Self-hosted origins must be added to the Google client; use **Change OAuth app** for a different client. Microsoft: SPA + `Files.ReadWrite.AppFolder` + `offline_access`. No client secret — PKCE only.
 
 **Stack:** React 19 · React Router 8 · Vite 8 · TypeScript · Tailwind v4 · Web Crypto / WebAuthn · PeerJS  
 **Conventions:** [AGENTS.md](./AGENTS.md) · design notes in [`docs/requirements/`](./docs/requirements/)

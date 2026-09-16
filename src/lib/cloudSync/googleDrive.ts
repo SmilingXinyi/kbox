@@ -5,10 +5,9 @@ import {authorizeWithPkce, refreshOAuthToken, type PkceOAuthConfig} from './oaut
 const DRIVE_FILES = 'https://www.googleapis.com/drive/v3/files';
 const DRIVE_UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files';
 
-function googlePkceConfig(): PkceOAuthConfig {
-    const clientId = googleDriveClientId();
+function googlePkceConfig(clientId = googleDriveClientId()): PkceOAuthConfig {
     if (!clientId) {
-        throw new Error('Google Drive is not configured. Set VITE_GOOGLE_DRIVE_CLIENT_ID.');
+        throw new Error('Save a Google Drive OAuth client ID, then authorize this page.');
     }
     return {
         authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
@@ -56,13 +55,15 @@ async function findVaultFileId(session: CloudAuthSession): Promise<string | null
 }
 
 async function googleDriveTransportAuthorize(): Promise<CloudAuthSession> {
-    const tokens = await authorizeWithPkce(googlePkceConfig());
+    const clientId = googleDriveClientId();
+    const tokens = await authorizeWithPkce(googlePkceConfig(clientId));
     return {
         provider: 'google-drive',
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken,
         expiresAt: tokens.expiresAt,
-        accountLabel: 'Google Drive'
+        accountLabel: 'Google Drive',
+        clientId
     };
 }
 
@@ -70,12 +71,14 @@ async function googleDriveTransportRefresh(session: CloudAuthSession): Promise<C
     if (!session.refreshToken) {
         throw new Error('Google Drive session expired. Reconnect the drive.');
     }
-    const tokens = await refreshOAuthToken(googlePkceConfig(), session.refreshToken);
+    const clientId = session.clientId || googleDriveClientId();
+    const tokens = await refreshOAuthToken(googlePkceConfig(clientId), session.refreshToken);
     return {
         ...session,
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken,
-        expiresAt: tokens.expiresAt
+        expiresAt: tokens.expiresAt,
+        clientId
     };
 }
 

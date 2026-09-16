@@ -41,6 +41,8 @@ export type CloudAuthSession = {
     refreshToken?: string;
     expiresAt: number;
     accountLabel?: string;
+    /** Public OAuth client ID used to obtain this session (needed to refresh). */
+    clientId?: string;
 };
 
 export type CloudTransport = {

@@ -191,7 +191,7 @@ export default function VaultSetup({onInitialized, onRestored, cloud}: VaultSetu
 
     if (mode === 'cloud') {
         return (
-            <div className="flex flex-col items-center justify-center min-h-full p-4 safe-pt safe-pb overflow-y-auto overscroll-y-contain">
+            <div className="flex flex-col items-center justify-start min-h-full p-4 safe-pt safe-pb overflow-y-auto overscroll-y-contain">
                 <motion.div
                     initial={{opacity: 0, y: 16}}
                     animate={{opacity: 1, y: 0}}

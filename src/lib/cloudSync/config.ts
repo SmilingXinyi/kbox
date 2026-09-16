@@ -1,18 +1,24 @@
 import type {CloudProviderId} from '../../types/cloudSync';
+import {loadCloudClientId} from './clientIds';
 
 export const CLOUD_FILE_NAME = 'kbox-vault.json';
 
 export function googleDriveClientId(): string {
-    return import.meta.env.VITE_GOOGLE_DRIVE_CLIENT_ID?.trim() ?? '';
+    return loadCloudClientId('google-drive');
 }
 
 export function oneDriveClientId(): string {
-    return import.meta.env.VITE_ONEDRIVE_CLIENT_ID?.trim() ?? '';
+    return loadCloudClientId('onedrive');
 }
 
 export function isCloudProviderConfigured(id: CloudProviderId): boolean {
     if (id === 'google-drive') return googleDriveClientId().length > 0;
     return oneDriveClientId().length > 0;
+}
+
+/** Authorized JavaScript origin for Google / Entra SPA registration. */
+export function cloudOAuthJavaScriptOrigin(): string {
+    return window.location.origin;
 }
 
 export function cloudOAuthRedirectUri(): string {
