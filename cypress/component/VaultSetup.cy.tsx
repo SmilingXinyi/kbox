@@ -24,7 +24,7 @@ describe('<VaultSetup />', () => {
         cy.mount(<VaultSetup onInitialized={cy.stub().resolves()} onRestored={cy.stub().resolves()} cloud={cloud} />);
 
         cy.contains('button', 'Pull from Google Drive or OneDrive').click();
-        cy.contains('Pull from a cloud drive').should('be.visible');
+        cy.contains('Pull from a cloud drive').scrollIntoView().should('be.visible');
         cy.contains('button', 'Pull from Google Drive').should('be.disabled');
         cy.get('input[placeholder="PIN used on the source device"]').type('123456');
         cy.contains('button', 'Pull from Google Drive').click();

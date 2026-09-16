@@ -24,15 +24,13 @@ type ProviderCopy = {
 const PROVIDER_COPY: Record<CloudProviderId, ProviderCopy> = {
     'google-drive': {
         mark: 'G',
-        registerHint:
-            'Create a Google Cloud OAuth client (Web application), enable the Drive API, then add this origin and redirect URI.',
+        registerHint: 'Authorize Google in a popup. Vault file stays in Drive app data.',
         registerHref: 'https://console.cloud.google.com/apis/credentials',
         registerLabel: 'Google Cloud Console'
     },
     onedrive: {
         mark: 'M',
-        registerHint:
-            'Register an Entra public SPA, add this redirect URI, and grant Files.ReadWrite.AppFolder plus offline_access.',
+        registerHint: 'Authorize Microsoft in a popup. Vault file stays in the OneDrive app folder.',
         registerHref: 'https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade',
         registerLabel: 'Microsoft Entra'
     }
@@ -93,10 +91,7 @@ export default function VaultCloudSync({cloud, variant = 'settings', isUnlocked 
         'google-drive': '',
         onedrive: ''
     });
-    const [editingApp, setEditingApp] = useState<Record<CloudProviderId, boolean>>({
-        'google-drive': false,
-        onedrive: false
-    });
+    const [openPanel, setOpenPanel] = useState<CloudProviderId | null>(null);
     const [formError, setFormError] = useState<string | null>(null);
     const [copiedField, setCopiedField] = useState<'origin' | 'redirect' | null>(null);
 
@@ -108,25 +103,31 @@ export default function VaultCloudSync({cloud, variant = 'settings', isUnlocked 
     const redirectUri = cloudOAuthRedirectUri();
     const javascriptOrigin = cloudOAuthJavaScriptOrigin();
 
-    const showAppFields = (id: CloudProviderId, configured: boolean) => !configured || editingApp[id];
+    const showAppFields = (id: CloudProviderId) => openPanel === id;
 
     const prepareClientId = (id: CloudProviderId): boolean => {
         const provider = cloud.providers.find(item => item.id === id);
         if (!provider) return false;
-        if (provider.configured && !editingApp[id]) return true;
+        if (provider.configured && openPanel !== id) return true;
 
         const clientId = draftIds[id].trim() || provider.clientId.trim();
         if (!clientId) {
+            setOpenPanel(id);
             setFormError(`Enter the ${provider.label} OAuth client ID, then continue.`);
             return false;
         }
         cloud.saveClientId(id, clientId);
-        setEditingApp(current => ({...current, [id]: false}));
+        setOpenPanel(null);
         return true;
     };
 
     const handlePull = (id: CloudProviderId) => {
         setFormError(null);
+        const provider = cloud.providers.find(item => item.id === id);
+        if (provider && !provider.configured && openPanel !== id) {
+            setOpenPanel(id);
+            return;
+        }
         if (!prepareClientId(id)) return;
         void cloud.pull(id, needsPin ? {pin} : undefined).catch(() => {
             // Error is surfaced via cloud.error.
@@ -135,6 +136,11 @@ export default function VaultCloudSync({cloud, variant = 'settings', isUnlocked 
 
     const handleConnect = (id: CloudProviderId) => {
         setFormError(null);
+        const provider = cloud.providers.find(item => item.id === id);
+        if (provider && !provider.configured && openPanel !== id) {
+            setOpenPanel(id);
+            return;
+        }
         if (!prepareClientId(id)) return;
         void cloud.connect(id, needsPin ? {pin} : undefined).catch(() => {
             // Error is surfaced via cloud.error.
@@ -230,7 +236,7 @@ export default function VaultCloudSync({cloud, variant = 'settings', isUnlocked 
             <div className="space-y-2">
                 {cloud.providers.map(provider => {
                     const copy = PROVIDER_COPY[provider.id];
-                    const fieldsOpen = showAppFields(provider.id, provider.configured);
+                    const fieldsOpen = showAppFields(provider.id);
                     return (
                         <article
                             key={provider.id}
@@ -257,15 +263,7 @@ export default function VaultCloudSync({cloud, variant = 'settings', isUnlocked 
                                         )}
                                     </div>
                                     <p className="text-[11px] text-surface-400 leading-relaxed mt-0.5">
-                                        {copy.registerHint}{' '}
-                                        <a
-                                            href={copy.registerHref}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            className="text-surface-200 underline underline-offset-2"
-                                        >
-                                            {copy.registerLabel}
-                                        </a>
+                                        {copy.registerHint}
                                     </p>
                                 </div>
                             </div>
@@ -284,22 +282,43 @@ export default function VaultCloudSync({cloud, variant = 'settings', isUnlocked 
                                                 ? '123456789-abc.apps.googleusercontent.com'
                                                 : 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
                                         }
+                                        hint="Public client ID only. Register this origin, then continue to authorize."
                                         className="[&_input]:font-mono [&_input]:text-xs"
                                     />
-                                    <CopyableValue
-                                        label="JavaScript origin"
-                                        value={javascriptOrigin}
-                                        copied={copiedField === 'origin'}
-                                        onCopy={() => void handleCopy('origin', javascriptOrigin)}
-                                    />
-                                    <CopyableValue
-                                        label="Redirect URI"
-                                        value={redirectUri}
-                                        copied={copiedField === 'redirect'}
-                                        onCopy={() => void handleCopy('redirect', redirectUri)}
-                                    />
+                                    <details className="rounded-md border border-surface-700 bg-surface-950/60 px-3 py-2">
+                                        <summary className="cursor-pointer text-[11px] text-surface-300 pressable">
+                                            Registration URIs
+                                        </summary>
+                                        <div className="mt-2 space-y-2.5">
+                                            <p className="text-[11px] text-surface-400 leading-relaxed">
+                                                Add these to your{' '}
+                                                <a
+                                                    href={copy.registerHref}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    className="text-surface-200 underline underline-offset-2"
+                                                >
+                                                    {copy.registerLabel}
+                                                </a>{' '}
+                                                app. Google: Web client + Drive API. Microsoft: SPA +
+                                                Files.ReadWrite.AppFolder + offline_access.
+                                            </p>
+                                            <CopyableValue
+                                                label="JavaScript origin"
+                                                value={javascriptOrigin}
+                                                copied={copiedField === 'origin'}
+                                                onCopy={() => void handleCopy('origin', javascriptOrigin)}
+                                            />
+                                            <CopyableValue
+                                                label="Redirect URI"
+                                                value={redirectUri}
+                                                copied={copiedField === 'redirect'}
+                                                onCopy={() => void handleCopy('redirect', redirectUri)}
+                                            />
+                                        </div>
+                                    </details>
                                 </div>
-                            ) : (
+                            ) : provider.configured ? (
                                 <button
                                     type="button"
                                     onClick={() => {
@@ -307,13 +326,13 @@ export default function VaultCloudSync({cloud, variant = 'settings', isUnlocked 
                                             ...current,
                                             [provider.id]: current[provider.id] || provider.clientId
                                         }));
-                                        setEditingApp(current => ({...current, [provider.id]: true}));
+                                        setOpenPanel(provider.id);
                                     }}
                                     className="text-[11px] text-surface-400 hover:text-surface-200 underline underline-offset-2 cursor-pointer pressable"
                                 >
                                     Change OAuth app
                                 </button>
-                            )}
+                            ) : null}
 
                             <div
                                 className={`grid gap-2 ${variant === 'settings' ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}

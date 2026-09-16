@@ -56,14 +56,19 @@ describe('<VaultCloudSync />', () => {
         });
         cy.mount(<VaultCloudSync cloud={cloud} isUnlocked />);
 
-        cy.contains('OAuth client ID').should('be.visible');
-        cy.contains('Redirect URI').should('be.visible');
+        cy.contains('OAuth client ID').should('not.exist');
         cy.contains('button', 'Connect Google Drive').click();
         cy.get('@cloudConnect').should('not.have.been.called');
-        cy.contains('Enter the Google Drive OAuth client ID').should('be.visible');
+        cy.get('input[aria-label="Google Drive OAuth client ID"]').should('be.visible');
+
+        cy.contains('button', 'Connect Google Drive').click();
+        cy.contains('Enter the Google Drive OAuth client ID').scrollIntoView().should('be.visible');
+        cy.get('@cloudConnect').should('not.have.been.called');
 
         cy.get('input[aria-label="Google Drive OAuth client ID"]').type('123.apps.googleusercontent.com');
-        cy.contains('button', 'Connect Google Drive').click();
+        cy.contains('summary', 'Registration URIs').click();
+        cy.contains('Redirect URI').scrollIntoView().should('be.visible');
+        cy.contains('button', 'Connect Google Drive').scrollIntoView().click();
         cy.get('@cloudSaveClientId').should('have.been.calledWith', 'google-drive', '123.apps.googleusercontent.com');
         cy.get('@cloudConnect').should('have.been.calledWith', 'google-drive');
     });
