@@ -3,7 +3,7 @@ import type {CloudProviderId} from '../../types/cloudSync';
 const STORAGE_KEY = 'kbox_cloud_oauth_clients:v1';
 
 /** Public Google OAuth Web client ID shipped with kbox (not a secret). */
-export const KBOX_GOOGLE_DRIVE_CLIENT_ID = '1002958005726-5ngc7j9aku2ofjdl84har471gp5635pt.apps.googleusercontent.com';
+export const KBOX_GOOGLE_DRIVE_CLIENT_ID = '144429774833-7s6jocb2d7d9cja73teu0jchihq7hqf6.apps.googleusercontent.com';
 
 const BUILTIN_CLIENT_IDS: Partial<Record<CloudProviderId, string>> = {
     'google-drive': KBOX_GOOGLE_DRIVE_CLIENT_ID
