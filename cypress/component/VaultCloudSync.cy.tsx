@@ -27,6 +27,7 @@ describe('<VaultCloudSync />', () => {
         cy.get('@cloudConnect').should('have.been.calledWith', 'google-drive');
         cy.contains('button', 'Connect OneDrive').click();
         cy.get('@cloudConnect').should('have.been.calledWith', 'onedrive');
+        cy.contains('Change OAuth app').should('be.visible');
     });
 
     it('shows connected status and disconnect', () => {
@@ -49,15 +50,22 @@ describe('<VaultCloudSync />', () => {
         cy.get('@cloudDisconnect').should('have.been.called');
     });
 
-    it('disables providers that are not configured', () => {
+    it('asks for an OAuth client ID before authorizing an unconfigured drive', () => {
         const cloud = createMockCloud({
             providers: [configuredProvider('google-drive', false), configuredProvider('onedrive', false)]
         });
-        cy.mount(<VaultCloudSync cloud={cloud} />);
+        cy.mount(<VaultCloudSync cloud={cloud} isUnlocked />);
 
-        cy.contains('VITE_GOOGLE_DRIVE_CLIENT_ID').should('be.visible');
-        cy.contains('button', 'Pull from Google Drive').should('be.disabled');
-        cy.contains('button', 'Pull from OneDrive').should('be.disabled');
+        cy.contains('OAuth client ID').should('be.visible');
+        cy.contains('Redirect URI').should('be.visible');
+        cy.contains('button', 'Connect Google Drive').click();
+        cy.get('@cloudConnect').should('not.have.been.called');
+        cy.contains('Enter the Google Drive OAuth client ID').should('be.visible');
+
+        cy.get('input[aria-label="Google Drive OAuth client ID"]').type('123.apps.googleusercontent.com');
+        cy.contains('button', 'Connect Google Drive').click();
+        cy.get('@cloudSaveClientId').should('have.been.calledWith', 'google-drive', '123.apps.googleusercontent.com');
+        cy.get('@cloudConnect').should('have.been.calledWith', 'google-drive');
     });
 
     it('setup variant focuses on pull', () => {

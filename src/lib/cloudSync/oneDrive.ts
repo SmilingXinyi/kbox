@@ -4,10 +4,9 @@ import {authorizeWithPkce, refreshOAuthToken, type PkceOAuthConfig} from './oaut
 
 const GRAPH_ITEM = `https://graph.microsoft.com/v1.0/me/drive/special/approot:/${CLOUD_FILE_NAME}`;
 
-function oneDrivePkceConfig(): PkceOAuthConfig {
-    const clientId = oneDriveClientId();
+function oneDrivePkceConfig(clientId = oneDriveClientId()): PkceOAuthConfig {
     if (!clientId) {
-        throw new Error('OneDrive is not configured. Set VITE_ONEDRIVE_CLIENT_ID.');
+        throw new Error('Save a OneDrive OAuth client ID, then authorize this page.');
     }
     return {
         authorizationEndpoint: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
@@ -36,13 +35,15 @@ async function readGraphError(response: Response): Promise<string> {
 }
 
 async function oneDriveTransportAuthorize(): Promise<CloudAuthSession> {
-    const tokens = await authorizeWithPkce(oneDrivePkceConfig());
+    const clientId = oneDriveClientId();
+    const tokens = await authorizeWithPkce(oneDrivePkceConfig(clientId));
     return {
         provider: 'onedrive',
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken,
         expiresAt: tokens.expiresAt,
-        accountLabel: 'OneDrive'
+        accountLabel: 'OneDrive',
+        clientId
     };
 }
 
@@ -50,12 +51,14 @@ async function oneDriveTransportRefresh(session: CloudAuthSession): Promise<Clou
     if (!session.refreshToken) {
         throw new Error('OneDrive session expired. Reconnect the drive.');
     }
-    const tokens = await refreshOAuthToken(oneDrivePkceConfig(), session.refreshToken);
+    const clientId = session.clientId || oneDriveClientId();
+    const tokens = await refreshOAuthToken(oneDrivePkceConfig(clientId), session.refreshToken);
     return {
         ...session,
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken,
-        expiresAt: tokens.expiresAt
+        expiresAt: tokens.expiresAt,
+        clientId
     };
 }
 

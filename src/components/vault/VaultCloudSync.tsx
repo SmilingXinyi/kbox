@@ -1,8 +1,9 @@
 import {useState} from 'react';
-import {Cloud, CloudDownload, Loader2, Unplug} from 'lucide-react';
+import {Check, Cloud, CloudDownload, Copy, Loader2, Unplug} from 'lucide-react';
 import type {CloudProviderId} from '../../types/cloudSync';
 import type {UseCloudSyncReturn} from '../../hooks/useCloudSync';
 import {PIN_MAX_LENGTH, PIN_MIN_LENGTH} from '../../lib/crypto';
+import {cloudOAuthJavaScriptOrigin, cloudOAuthRedirectUri} from '../../lib/cloudSync/config';
 import Alert from '../ui/Alert';
 import Button from '../ui/Button';
 import TextField from '../ui/TextField';
@@ -11,6 +12,30 @@ type VaultCloudSyncProps = {
     cloud: UseCloudSyncReturn;
     variant?: 'settings' | 'setup';
     isUnlocked?: boolean;
+};
+
+type ProviderCopy = {
+    mark: string;
+    registerHint: string;
+    registerHref: string;
+    registerLabel: string;
+};
+
+const PROVIDER_COPY: Record<CloudProviderId, ProviderCopy> = {
+    'google-drive': {
+        mark: 'G',
+        registerHint:
+            'Create a Google Cloud OAuth client (Web application), enable the Drive API, then add this origin and redirect URI.',
+        registerHref: 'https://console.cloud.google.com/apis/credentials',
+        registerLabel: 'Google Cloud Console'
+    },
+    onedrive: {
+        mark: 'M',
+        registerHint:
+            'Register an Entra public SPA, add this redirect URI, and grant Files.ReadWrite.AppFolder plus offline_access.',
+        registerHref: 'https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade',
+        registerLabel: 'Microsoft Entra'
+    }
 };
 
 function formatStamp(iso: string | null): string {
@@ -27,25 +52,104 @@ function statusLabel(status: UseCloudSyncReturn['status']): string | null {
     return null;
 }
 
+function CopyableValue({
+    label,
+    value,
+    copied,
+    onCopy
+}: {
+    label: string;
+    value: string;
+    copied: boolean;
+    onCopy: () => void;
+}) {
+    return (
+        <div className="space-y-1">
+            <p className="text-[10px] uppercase tracking-wide text-surface-400">{label}</p>
+            <div className="flex items-center gap-1.5">
+                <code className="flex-1 min-w-0 truncate rounded-md bg-surface-950 px-2 py-1.5 text-[11px] text-surface-300">
+                    {value}
+                </code>
+                <button
+                    type="button"
+                    onClick={onCopy}
+                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-surface-700 text-surface-300 hover:text-surface-100 hover:border-surface-500 cursor-pointer pressable"
+                    aria-label={copied ? `${label} copied` : `Copy ${label}`}
+                >
+                    {copied ? (
+                        <Check className="w-3.5 h-3.5 text-accent" aria-hidden />
+                    ) : (
+                        <Copy className="w-3.5 h-3.5" aria-hidden />
+                    )}
+                </button>
+            </div>
+        </div>
+    );
+}
+
 export default function VaultCloudSync({cloud, variant = 'settings', isUnlocked = false}: VaultCloudSyncProps) {
     const [pin, setPin] = useState('');
+    const [draftIds, setDraftIds] = useState<Record<CloudProviderId, string>>({
+        'google-drive': '',
+        onedrive: ''
+    });
+    const [editingApp, setEditingApp] = useState<Record<CloudProviderId, boolean>>({
+        'google-drive': false,
+        onedrive: false
+    });
+    const [formError, setFormError] = useState<string | null>(null);
+    const [copiedField, setCopiedField] = useState<'origin' | 'redirect' | null>(null);
+
     const busy = cloud.isBusy;
     const connected = cloud.session;
     const connectedProvider = cloud.providers.find(provider => provider.id === connected?.provider);
-    const anyConfigured = cloud.providers.some(provider => provider.configured);
     const needsPin = !isUnlocked;
     const pinReady = !needsPin || pin.length >= PIN_MIN_LENGTH;
+    const redirectUri = cloudOAuthRedirectUri();
+    const javascriptOrigin = cloudOAuthJavaScriptOrigin();
+
+    const showAppFields = (id: CloudProviderId, configured: boolean) => !configured || editingApp[id];
+
+    const prepareClientId = (id: CloudProviderId): boolean => {
+        const provider = cloud.providers.find(item => item.id === id);
+        if (!provider) return false;
+        if (provider.configured && !editingApp[id]) return true;
+
+        const clientId = draftIds[id].trim() || provider.clientId.trim();
+        if (!clientId) {
+            setFormError(`Enter the ${provider.label} OAuth client ID, then continue.`);
+            return false;
+        }
+        cloud.saveClientId(id, clientId);
+        setEditingApp(current => ({...current, [id]: false}));
+        return true;
+    };
 
     const handlePull = (id: CloudProviderId) => {
+        setFormError(null);
+        if (!prepareClientId(id)) return;
         void cloud.pull(id, needsPin ? {pin} : undefined).catch(() => {
             // Error is surfaced via cloud.error.
         });
     };
 
     const handleConnect = (id: CloudProviderId) => {
+        setFormError(null);
+        if (!prepareClientId(id)) return;
         void cloud.connect(id, needsPin ? {pin} : undefined).catch(() => {
             // Error is surfaced via cloud.error.
         });
+    };
+
+    const handleCopy = async (field: 'origin' | 'redirect', value: string) => {
+        try {
+            await navigator.clipboard.writeText(value);
+            setCopiedField(field);
+            window.setTimeout(() => setCopiedField(current => (current === field ? null : current)), 1600);
+        } catch (e) {
+            console.error('Failed to copy OAuth URI:', e);
+            setFormError('Could not copy to the clipboard.');
+        }
     };
 
     return (
@@ -60,32 +164,31 @@ export default function VaultCloudSync({cloud, variant = 'settings', isUnlocked 
             </div>
             <p className="text-[11px] text-surface-400 leading-relaxed">
                 {variant === 'setup'
-                    ? 'Authorize a drive, then enter the vault PIN to decrypt the whole-file blob. Recovery files stay local and are never uploaded. Biometrics stay on each device.'
-                    : 'Key changes push one AES-GCM blob (labels and secrets inside the ciphertext). On unlock, kbox pulls once if this device is still authorized. Recovery files are separate and never uploaded.'}
+                    ? 'Authorize Google Drive or OneDrive in this browser, then enter the vault PIN to decrypt the whole-file blob. Recovery files stay local and are never uploaded. Biometrics stay on each device.'
+                    : 'Authorize a drive in this browser. Key changes push one AES-GCM blob. On unlock, kbox pulls once if this device is still authorized. Recovery files are separate and never uploaded.'}
             </p>
 
-            {!anyConfigured && (
-                <Alert tone="info">
-                    Cloud drive OAuth client IDs are not set. Add{' '}
-                    <span className="font-mono">VITE_GOOGLE_DRIVE_CLIENT_ID</span> and/or{' '}
-                    <span className="font-mono">VITE_ONEDRIVE_CLIENT_ID</span> to enable Google Drive and OneDrive.
-                </Alert>
-            )}
-
-            {cloud.error && (
+            {(formError || cloud.error) && (
                 <Alert
                     tone="error"
                     action={
-                        <button type="button" onClick={cloud.clearError} className="underline cursor-pointer pressable">
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setFormError(null);
+                                cloud.clearError();
+                            }}
+                            className="underline cursor-pointer pressable"
+                        >
                             Dismiss
                         </button>
                     }
                 >
-                    {cloud.error}
+                    {formError || cloud.error}
                 </Alert>
             )}
 
-            {cloud.lastResult && !cloud.error && <Alert tone="success">{cloud.lastResult}</Alert>}
+            {cloud.lastResult && !cloud.error && !formError && <Alert tone="success">{cloud.lastResult}</Alert>}
 
             {statusLabel(cloud.status) && (
                 <p className="flex items-center gap-2 text-[11px] text-surface-300">
@@ -124,38 +227,120 @@ export default function VaultCloudSync({cloud, variant = 'settings', isUnlocked 
                 </div>
             )}
 
-            {variant === 'settings' && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {cloud.providers.map(provider => (
-                        <Button
-                            key={`connect-${provider.id}`}
-                            variant="secondary"
-                            onClick={() => handleConnect(provider.id)}
-                            disabled={busy || !provider.configured}
-                        >
-                            {connected?.provider === provider.id
-                                ? `Reconnect ${provider.label}`
-                                : `Connect ${provider.label}`}
-                        </Button>
-                    ))}
-                </div>
-            )}
-
             <div className="space-y-2">
-                <p className="text-[11px] font-medium text-surface-300">Pull vault</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {cloud.providers.map(provider => (
-                        <Button
-                            key={`pull-${provider.id}`}
-                            variant={variant === 'setup' && provider.configured ? 'primary' : 'secondary'}
-                            onClick={() => handlePull(provider.id)}
-                            disabled={busy || !provider.configured || !pinReady}
+                {cloud.providers.map(provider => {
+                    const copy = PROVIDER_COPY[provider.id];
+                    const fieldsOpen = showAppFields(provider.id, provider.configured);
+                    return (
+                        <article
+                            key={provider.id}
+                            className="rounded-lg border border-surface-700 bg-surface-900/40 p-3 space-y-3"
                         >
-                            <CloudDownload className="w-3.5 h-3.5" aria-hidden />
-                            Pull from {provider.label}
-                        </Button>
-                    ))}
-                </div>
+                            <div className="flex items-start gap-2.5">
+                                <span
+                                    className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-surface-800 text-[11px] font-semibold text-accent"
+                                    aria-hidden
+                                >
+                                    {copy.mark}
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                    <div className="flex items-center justify-between gap-2">
+                                        <h4 className="text-sm font-medium text-surface-100">{provider.label}</h4>
+                                        {provider.configured ? (
+                                            <span className="text-[10px] uppercase tracking-wide text-accent">
+                                                Ready
+                                            </span>
+                                        ) : (
+                                            <span className="text-[10px] uppercase tracking-wide text-surface-400">
+                                                Authorize
+                                            </span>
+                                        )}
+                                    </div>
+                                    <p className="text-[11px] text-surface-400 leading-relaxed mt-0.5">
+                                        {copy.registerHint}{' '}
+                                        <a
+                                            href={copy.registerHref}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="text-surface-200 underline underline-offset-2"
+                                        >
+                                            {copy.registerLabel}
+                                        </a>
+                                    </p>
+                                </div>
+                            </div>
+
+                            {fieldsOpen ? (
+                                <div className="space-y-2.5">
+                                    <TextField
+                                        label="OAuth client ID"
+                                        aria-label={`${provider.label} OAuth client ID`}
+                                        value={draftIds[provider.id]}
+                                        onChange={e =>
+                                            setDraftIds(current => ({...current, [provider.id]: e.target.value}))
+                                        }
+                                        placeholder={
+                                            provider.id === 'google-drive'
+                                                ? '123456789-abc.apps.googleusercontent.com'
+                                                : 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
+                                        }
+                                        className="[&_input]:font-mono [&_input]:text-xs"
+                                    />
+                                    <CopyableValue
+                                        label="JavaScript origin"
+                                        value={javascriptOrigin}
+                                        copied={copiedField === 'origin'}
+                                        onCopy={() => void handleCopy('origin', javascriptOrigin)}
+                                    />
+                                    <CopyableValue
+                                        label="Redirect URI"
+                                        value={redirectUri}
+                                        copied={copiedField === 'redirect'}
+                                        onCopy={() => void handleCopy('redirect', redirectUri)}
+                                    />
+                                </div>
+                            ) : (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setDraftIds(current => ({
+                                            ...current,
+                                            [provider.id]: current[provider.id] || provider.clientId
+                                        }));
+                                        setEditingApp(current => ({...current, [provider.id]: true}));
+                                    }}
+                                    className="text-[11px] text-surface-400 hover:text-surface-200 underline underline-offset-2 cursor-pointer pressable"
+                                >
+                                    Change OAuth app
+                                </button>
+                            )}
+
+                            <div
+                                className={`grid gap-2 ${variant === 'settings' ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}
+                            >
+                                {variant === 'settings' && (
+                                    <Button
+                                        variant="secondary"
+                                        onClick={() => handleConnect(provider.id)}
+                                        disabled={busy}
+                                    >
+                                        {connected?.provider === provider.id
+                                            ? `Reconnect ${provider.label}`
+                                            : `Connect ${provider.label}`}
+                                    </Button>
+                                )}
+                                <Button
+                                    variant={variant === 'setup' ? 'primary' : 'secondary'}
+                                    onClick={() => handlePull(provider.id)}
+                                    disabled={busy || !pinReady}
+                                >
+                                    <CloudDownload className="w-3.5 h-3.5" aria-hidden />
+                                    Pull from {provider.label}
+                                </Button>
+                            </div>
+                        </article>
+                    );
+                })}
             </div>
         </section>
     );

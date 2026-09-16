@@ -13,6 +13,7 @@ import {
     patchCloudSyncState,
     type CloudSyncStoredState
 } from '../lib/cloudSync/authStorage';
+import {loadCloudClientId, saveCloudClientId} from '../lib/cloudSync/clientIds';
 import {pullVaultFromCloud, pushVaultToCloud} from '../lib/cloudSync/engine';
 import {listCloudTransports} from '../lib/cloudSync/transports';
 
@@ -22,6 +23,7 @@ export type CloudProviderInfo = {
     id: CloudProviderId;
     label: string;
     configured: boolean;
+    clientId: string;
 };
 
 type UseCloudSyncOptions = {
@@ -41,7 +43,8 @@ function providerList(transports: CloudTransport[]): CloudProviderInfo[] {
     return transports.map(transport => ({
         id: transport.id,
         label: transport.label,
-        configured: transport.isConfigured()
+        configured: transport.isConfigured(),
+        clientId: loadCloudClientId(transport.id)
     }));
 }
 
@@ -67,6 +70,7 @@ export function useCloudSync({
     const [status, setStatus] = useState<CloudSyncStatus>('idle');
     const [error, setError] = useState<string | null>(null);
     const [lastResult, setLastResult] = useState<string | null>(null);
+    const [, setClientIdsEpoch] = useState(0);
 
     const storedRef = useRef(stored);
     const onApplyRef = useRef(onApplySnapshot);
@@ -106,9 +110,14 @@ export function useCloudSync({
             throw new Error('Unknown cloud provider.');
         }
         if (!transport.isConfigured()) {
-            throw new Error(`${transport.label} is not configured. Add its OAuth client ID to the environment.`);
+            throw new Error(`Save an OAuth client ID for ${transport.label}, then authorize this page.`);
         }
         return transport;
+    };
+
+    const saveClientId = (providerId: CloudProviderId, clientId: string) => {
+        saveCloudClientId(providerId, clientId);
+        setClientIdsEpoch(value => value + 1);
     };
 
     const persistSession = (session: CloudAuthSession, extra?: Partial<CloudSyncStoredState>) => {
@@ -317,6 +326,7 @@ export function useCloudSync({
         connect,
         disconnect,
         pull,
+        saveClientId,
         schedulePush,
         clearError
     };

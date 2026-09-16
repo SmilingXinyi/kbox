@@ -32,7 +32,8 @@ function isSession(value: unknown): value is CloudAuthSession {
         session.accessToken.length > 0 &&
         typeof session.expiresAt === 'number' &&
         (session.refreshToken === undefined || typeof session.refreshToken === 'string') &&
-        (session.accountLabel === undefined || typeof session.accountLabel === 'string')
+        (session.accountLabel === undefined || typeof session.accountLabel === 'string') &&
+        (session.clientId === undefined || typeof session.clientId === 'string')
     );
 }
 

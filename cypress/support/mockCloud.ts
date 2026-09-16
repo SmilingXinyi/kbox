@@ -4,8 +4,8 @@ import type {CloudAuthSession, CloudProviderId} from '../../src/types/cloudSync'
 type MockCloudOverrides = Partial<UseCloudSyncReturn>;
 
 const DEFAULT_PROVIDERS: UseCloudSyncReturn['providers'] = [
-    {id: 'google-drive', label: 'Google Drive', configured: true},
-    {id: 'onedrive', label: 'OneDrive', configured: true}
+    {id: 'google-drive', label: 'Google Drive', configured: true, clientId: 'mock-google-client'},
+    {id: 'onedrive', label: 'OneDrive', configured: true, clientId: 'mock-onedrive-client'}
 ];
 
 export function createMockCloud(overrides: MockCloudOverrides = {}): UseCloudSyncReturn {
@@ -24,6 +24,7 @@ export function createMockCloud(overrides: MockCloudOverrides = {}): UseCloudSyn
         connect: cy.stub().as('cloudConnect').resolves(),
         disconnect: cy.stub().as('cloudDisconnect'),
         pull: cy.stub().as('cloudPull').resolves(),
+        saveClientId: cy.stub().as('cloudSaveClientId'),
         schedulePush: cy.stub().as('cloudSchedulePush'),
         clearError: cy.stub().as('cloudClearError'),
         ...overrides
@@ -32,5 +33,5 @@ export function createMockCloud(overrides: MockCloudOverrides = {}): UseCloudSyn
 
 export function configuredProvider(id: CloudProviderId, configured: boolean) {
     const label = id === 'google-drive' ? 'Google Drive' : 'OneDrive';
-    return {id, label, configured};
+    return {id, label, configured, clientId: configured ? `mock-${id}` : ''};
 }
