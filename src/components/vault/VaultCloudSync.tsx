@@ -4,6 +4,7 @@ import type {CloudProviderId} from '../../types/cloudSync';
 import type {UseCloudSyncReturn} from '../../hooks/useCloudSync';
 import {PIN_MAX_LENGTH, PIN_MIN_LENGTH} from '../../lib/crypto';
 import {cloudOAuthJavaScriptOrigin, cloudOAuthRedirectUri} from '../../lib/cloudSync/config';
+import {KBOX_GOOGLE_DRIVE_CLIENT_ID} from '../../lib/cloudSync/clientIds';
 import Alert from '../ui/Alert';
 import Button from '../ui/Button';
 import TextField from '../ui/TextField';
@@ -108,17 +109,31 @@ export default function VaultCloudSync({cloud, variant = 'settings', isUnlocked 
     const prepareClientId = (id: CloudProviderId): boolean => {
         const provider = cloud.providers.find(item => item.id === id);
         if (!provider) return false;
+        const typed = draftIds[id].trim();
         if (provider.configured && openPanel !== id) return true;
 
-        const clientId = draftIds[id].trim() || provider.clientId.trim();
-        if (!clientId) {
-            setOpenPanel(id);
-            setFormError(`Enter the ${provider.label} OAuth client ID, then continue.`);
-            return false;
+        if (typed) {
+            cloud.saveClientId(id, typed);
+            setOpenPanel(null);
+            return true;
         }
-        cloud.saveClientId(id, clientId);
-        setOpenPanel(null);
-        return true;
+
+        if (id === 'google-drive') {
+            cloud.saveClientId(id, '');
+            setDraftIds(current => ({...current, 'google-drive': KBOX_GOOGLE_DRIVE_CLIENT_ID}));
+            setOpenPanel(null);
+            return true;
+        }
+
+        const existing = provider.clientId.trim();
+        if (existing) {
+            setOpenPanel(null);
+            return true;
+        }
+
+        setOpenPanel(id);
+        setFormError(`Enter the ${provider.label} OAuth client ID, then continue.`);
+        return false;
     };
 
     const handlePull = (id: CloudProviderId) => {
@@ -282,7 +297,11 @@ export default function VaultCloudSync({cloud, variant = 'settings', isUnlocked 
                                                 ? '123456789-abc.apps.googleusercontent.com'
                                                 : 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
                                         }
-                                        hint="Public client ID only. Register this origin, then continue to authorize."
+                                        hint={
+                                            provider.id === 'google-drive'
+                                                ? 'Leave blank to use the kbox Google app, or paste your own Web client ID.'
+                                                : 'Public client ID only. Register this origin, then continue to authorize.'
+                                        }
                                         className="[&_input]:font-mono [&_input]:text-xs"
                                     />
                                     <details className="rounded-md border border-surface-700 bg-surface-950/60 px-3 py-2">
@@ -317,6 +336,23 @@ export default function VaultCloudSync({cloud, variant = 'settings', isUnlocked 
                                             />
                                         </div>
                                     </details>
+                                    {provider.id === 'google-drive' && (
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                cloud.saveClientId('google-drive', '');
+                                                setDraftIds(current => ({
+                                                    ...current,
+                                                    'google-drive': KBOX_GOOGLE_DRIVE_CLIENT_ID
+                                                }));
+                                                setOpenPanel(null);
+                                                setFormError(null);
+                                            }}
+                                            className="text-[11px] text-surface-400 hover:text-surface-200 underline underline-offset-2 cursor-pointer pressable"
+                                        >
+                                            Use kbox Google app
+                                        </button>
+                                    )}
                                 </div>
                             ) : provider.configured ? (
                                 <button

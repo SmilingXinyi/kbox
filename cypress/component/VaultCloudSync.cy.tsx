@@ -53,6 +53,26 @@ describe('<VaultCloudSync />', () => {
         cy.get('@cloudDisconnect').should('have.been.called');
     });
 
+    it('restores the shipped Google Drive app', () => {
+        const cloud = createMockCloud({
+            providers: [
+                {
+                    id: 'google-drive',
+                    label: 'Google Drive',
+                    configured: true,
+                    clientId: '123.apps.googleusercontent.com'
+                },
+                configuredProvider('onedrive', false)
+            ]
+        });
+        cy.mount(<VaultCloudSync cloud={cloud} isUnlocked />);
+
+        cy.contains('button', 'Change OAuth app').click();
+        cy.contains('button', 'Use kbox Google app').click();
+        cy.get('@cloudSaveClientId').should('have.been.calledWith', 'google-drive', '');
+        cy.contains('OAuth client ID').should('not.exist');
+    });
+
     it('asks for an OAuth client ID before authorizing an unconfigured drive', () => {
         const cloud = createMockCloud({
             providers: [configuredProvider('google-drive', true), configuredProvider('onedrive', false)]
