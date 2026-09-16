@@ -196,7 +196,7 @@ export default function VaultSetup({onInitialized, onRestored, cloud}: VaultSetu
                     initial={{opacity: 0, y: 16}}
                     animate={{opacity: 1, y: 0}}
                     transition={{duration: 0.35, ease: [0.23, 1, 0.32, 1]}}
-                    className="w-full max-w-md my-auto overflow-hidden bg-surface-900 border border-surface-700 rounded-2xl"
+                    className="w-full max-w-md overflow-hidden bg-surface-900 border border-surface-700 rounded-2xl"
                 >
                     <div className="h-1.5 hazard-stripe" aria-hidden />
                     <div className="p-5 sm:p-6">

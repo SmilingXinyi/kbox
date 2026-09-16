@@ -2,6 +2,9 @@ import VaultSetup from '../../src/components/vault/VaultSetup';
 import {createMockCloud} from '../support/mockCloud';
 
 describe('<VaultSetup />', () => {
+    beforeEach(() => {
+        cy.viewport(1280, 900);
+    });
     it('defaults Owner to an English identifier and accepts Chinese', () => {
         cy.mount(
             <VaultSetup

@@ -6,6 +6,9 @@ function typeCloudPin(pin = '123456') {
 }
 
 describe('<VaultCloudSync />', () => {
+    beforeEach(() => {
+        cy.viewport(1280, 900);
+    });
     it('lets the user choose a drive to pull from', () => {
         const cloud = createMockCloud();
         cy.mount(<VaultCloudSync cloud={cloud} isUnlocked />);
