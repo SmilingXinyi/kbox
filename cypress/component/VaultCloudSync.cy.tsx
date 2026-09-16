@@ -55,25 +55,25 @@ describe('<VaultCloudSync />', () => {
 
     it('asks for an OAuth client ID before authorizing an unconfigured drive', () => {
         const cloud = createMockCloud({
-            providers: [configuredProvider('google-drive', false), configuredProvider('onedrive', false)]
+            providers: [configuredProvider('google-drive', true), configuredProvider('onedrive', false)]
         });
         cy.mount(<VaultCloudSync cloud={cloud} isUnlocked />);
 
         cy.contains('OAuth client ID').should('not.exist');
-        cy.contains('button', 'Connect Google Drive').click();
+        cy.contains('button', 'Connect OneDrive').click();
         cy.get('@cloudConnect').should('not.have.been.called');
-        cy.get('input[aria-label="Google Drive OAuth client ID"]').should('be.visible');
+        cy.get('input[aria-label="OneDrive OAuth client ID"]').should('be.visible');
 
-        cy.contains('button', 'Connect Google Drive').click();
-        cy.contains('Enter the Google Drive OAuth client ID').scrollIntoView().should('be.visible');
+        cy.contains('button', 'Connect OneDrive').click();
+        cy.contains('Enter the OneDrive OAuth client ID').scrollIntoView().should('be.visible');
         cy.get('@cloudConnect').should('not.have.been.called');
 
-        cy.get('input[aria-label="Google Drive OAuth client ID"]').type('123.apps.googleusercontent.com');
+        cy.get('input[aria-label="OneDrive OAuth client ID"]').type('aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee');
         cy.contains('summary', 'Registration URIs').click();
         cy.contains('Redirect URI').scrollIntoView().should('be.visible');
-        cy.contains('button', 'Connect Google Drive').scrollIntoView().click();
-        cy.get('@cloudSaveClientId').should('have.been.calledWith', 'google-drive', '123.apps.googleusercontent.com');
-        cy.get('@cloudConnect').should('have.been.calledWith', 'google-drive');
+        cy.contains('button', 'Connect OneDrive').scrollIntoView().click();
+        cy.get('@cloudSaveClientId').should('have.been.calledWith', 'onedrive', 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee');
+        cy.get('@cloudConnect').should('have.been.calledWith', 'onedrive');
     });
 
     it('setup variant focuses on pull', () => {

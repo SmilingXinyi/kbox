@@ -72,7 +72,7 @@ Report crypto/vault issues privately (e.g. GitHub Security Advisory), not as pub
 
 Optional env (copy `.env.example` → `.env.local`): `VITE_ENABLE_BIOMETRIC_SIMULATOR=true` for non-DEV simulator (preview sandboxes only).
 
-**Cloud drive (Settings):** pick Google Drive or OneDrive, paste a public OAuth client ID once (stored in this browser), then authorize in the popup. Register the page origin and redirect `{origin}{base}/?kbox_cloud_oauth=1` on the OAuth app (Google: Web client + Drive API; Microsoft: SPA + `Files.ReadWrite.AppFolder` + `offline_access`). No client secret — PKCE only.
+**Cloud drive (Settings):** Connect Google Drive authorizes in a popup (kbox ships a public OAuth client ID). OneDrive still needs a public SPA client ID once on this device. Redirect URI is `{origin}{base}/?kbox_cloud_oauth=1`. Self-hosted origins must be added to the Google client; use **Change OAuth app** for a different client. Microsoft: SPA + `Files.ReadWrite.AppFolder` + `offline_access`. No client secret — PKCE only.
 
 **Stack:** React 19 · React Router 8 · Vite 8 · TypeScript · Tailwind v4 · Web Crypto / WebAuthn · PeerJS  
 **Conventions:** [AGENTS.md](./AGENTS.md) · design notes in [`docs/requirements/`](./docs/requirements/)
