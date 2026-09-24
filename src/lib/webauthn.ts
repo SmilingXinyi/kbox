@@ -37,8 +37,8 @@ type PrfExtensionClientOutputs = {
     };
 };
 
-/** Shown on the passkey sheet. Unicode (including Chinese) is allowed. */
-export const WEBAUTHN_USER_NAME_MAX_LENGTH = 64;
+/** Stable WebAuthn user.name / displayName. Not shown in kbox UI; OS passkey sheets may show it. */
+export const WEBAUTHN_USER_NAME = 'kbox';
 
 function readPrfExtension(credential: PublicKeyCredential): PrfExtensionClientOutputs | undefined {
     const outputs = credential.getClientExtensionResults() as AuthenticationExtensionsClientOutputs & {
@@ -67,7 +67,7 @@ function randomUserHandle(): Uint8Array<ArrayBuffer> {
  *
  * Assertion signatures are NOT used for key derivation (they change with signCount).
  */
-export async function registerWebAuthnCredential(username: string): Promise<WebAuthnRegistrationResult> {
+export async function registerWebAuthnCredential(): Promise<WebAuthnRegistrationResult> {
     if (!isWebAuthnSupported()) {
         return {
             credentialId: '',
@@ -99,8 +99,8 @@ export async function registerWebAuthnCredential(username: string): Promise<WebA
                 },
                 user: {
                     id: randomUserHandle(),
-                    name: username,
-                    displayName: username
+                    name: WEBAUTHN_USER_NAME,
+                    displayName: WEBAUTHN_USER_NAME
                 },
                 pubKeyCredParams: [
                     {type: 'public-key', alg: -7},

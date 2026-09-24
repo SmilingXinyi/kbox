@@ -5,7 +5,7 @@ const STORAGE_KEY = 'kbox_cloud_oauth_clients:v1';
 /** Public Google OAuth Web client ID shipped with kbox (not a secret). */
 export const KBOX_GOOGLE_DRIVE_CLIENT_ID = '144429774833-7s6jocb2d7d9cja73teu0jchihq7hqf6.apps.googleusercontent.com';
 
-const BUILTIN_CLIENT_IDS: Partial<Record<CloudProviderId, string>> = {
+const BUILTIN_CLIENT_IDS: Record<CloudProviderId, string> = {
     'google-drive': KBOX_GOOGLE_DRIVE_CLIENT_ID
 };
 
@@ -22,14 +22,12 @@ function loadAll(): StoredClients {
         if (!raw) return EMPTY;
         const parsed = JSON.parse(raw) as Partial<StoredClients>;
         if (parsed.v !== 1 || !parsed.ids || typeof parsed.ids !== 'object') return EMPTY;
-        const clients: StoredClients = {
+        return {
             v: 1,
             ids: {
-                'google-drive': sanitize(parsed.ids['google-drive']),
-                onedrive: sanitize(parsed.ids.onedrive)
+                'google-drive': sanitize(parsed.ids['google-drive'])
             }
         };
-        return clients;
     } catch (e) {
         console.error('Failed to read cloud OAuth client IDs:', e);
         return EMPTY;
@@ -41,15 +39,14 @@ export function clearLegacyCloudClientSecrets(): void {
     try {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (!raw) return;
-        const parsed = JSON.parse(raw) as Partial<StoredClients>;
+        const parsed = JSON.parse(raw) as Partial<StoredClients> & {ids?: Record<string, unknown>};
         if (parsed.v !== 1 || !parsed.ids || typeof parsed.ids !== 'object' || !('secrets' in parsed)) return;
         localStorage.setItem(
             STORAGE_KEY,
             JSON.stringify({
                 v: 1,
                 ids: {
-                    'google-drive': sanitize(parsed.ids['google-drive']),
-                    onedrive: sanitize(parsed.ids.onedrive)
+                    'google-drive': sanitize(parsed.ids['google-drive'])
                 }
             } satisfies StoredClients)
         );

@@ -1,5 +1,7 @@
 # 08 — Polish & QA
 
+> 历史阶段文档。此后已加入 PWA 与 BiometricSimulator（DEV 门控），与当初「主线不做」不一致处以 [10-direction.md](./10-direction.md) 为准。
+
 ## Goal
 
 主线功能打磨与质量门禁：文案、空状态、响应式、无障碍基础、lint/build；勾完总清单主线项。

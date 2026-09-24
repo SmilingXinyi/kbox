@@ -72,11 +72,11 @@ describe('cloud sync engine', () => {
     });
 
     it('skips auto-pull when local revision is newer', async () => {
-        const drive = createMemoryTransport('onedrive');
+        const drive = createMemoryTransport('google-drive');
         const context = await makeContext('OlderCloud');
         drive.store.body = serializeCloudVaultFile(await createCloudVaultFile(context, '2026-09-14T09:00:00.000Z'));
 
-        const pulled = await pullVaultFromCloud(drive, sessionFor('onedrive'), {
+        const pulled = await pullVaultFromCloud(drive, sessionFor('google-drive'), {
             mode: 'auto',
             localRevision: '2026-09-14T12:00:00.000Z',
             secret: {masterKeyHex: context.masterKeyHex}
@@ -127,8 +127,8 @@ describe('cloud sync engine', () => {
     });
 
     it('skips push when this device has no unlocked vault', async () => {
-        const drive = createMemoryTransport('onedrive');
-        const pushed = await pushVaultToCloud(drive, sessionFor('onedrive'), null, '2026-09-14T10:00:00.000Z');
+        const drive = createMemoryTransport('google-drive');
+        const pushed = await pushVaultToCloud(drive, sessionFor('google-drive'), null, '2026-09-14T10:00:00.000Z');
         expect(pushed.result.status).to.eq('skipped');
         expect(drive.store.body).to.eq(null);
     });

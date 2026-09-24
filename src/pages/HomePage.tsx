@@ -319,7 +319,11 @@ export default function HomePage() {
                 onRequestUnlock={() => {
                     vault.setShowUnlockModal(true);
                 }}
-                onReset={vault.resetVault}
+                onEnrollWebAuthn={vault.enrollWebAuthn}
+                onReset={async () => {
+                    cloud.reset();
+                    await vault.resetVault();
+                }}
                 cloud={cloud}
             />
 

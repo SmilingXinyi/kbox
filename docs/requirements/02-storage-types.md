@@ -1,5 +1,7 @@
 # 02 — Storage & Types：类型、IndexedDB、前缀与迁移
 
+> 历史阶段文档。现网 `VaultState` 为 `'loading' | 'uninitialized' | 'unlocked'`（无 `locked`）。口径见 [10-direction.md](./10-direction.md)。
+
 ## Goal
 
 建立金库领域类型与本地持久化层；使用 `kbox_*` 命名空间；支持从 demo 的 `apiKeySafe_*` 一次性迁移。

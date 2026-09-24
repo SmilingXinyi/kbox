@@ -1,5 +1,7 @@
 # 04 — Vault Hooks：状态机、CRUD、自动锁定
 
+> 历史阶段文档。现网 `lock()` 后仍为 `unlocked` + `masterKey=null`（view-only）。口径见 [10-direction.md](./10-direction.md)。
+
 ## Goal
 
 把 demo `App.tsx` 中的业务编排抽成可测试的 hooks：`useVault` + `useAutoLock`，供页面与 UI 组件消费。

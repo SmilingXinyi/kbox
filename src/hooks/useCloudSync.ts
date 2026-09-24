@@ -8,7 +8,7 @@ import type {
     CloudVaultSnapshot
 } from '../types/cloudSync';
 import {
-    clearCloudSyncAuth,
+    clearCloudSyncState,
     loadCloudSyncState,
     patchCloudSyncState,
     type CloudSyncStoredState
@@ -38,6 +38,7 @@ type UseCloudSyncOptions = {
 };
 
 const PUSH_DEBOUNCE_MS = 600;
+const GOOGLE_DRIVE: CloudProviderId = 'google-drive';
 
 function providerList(transports: CloudTransport[]): CloudProviderInfo[] {
     return transports.map(transport => ({
@@ -74,7 +75,7 @@ export function useCloudSync({
     const [, setClientIdsEpoch] = useState(0);
 
     const storedRef = useRef(stored);
-    const sessionRef = useRef<CloudAuthSession | null>(stored.session);
+    const sessionRef = useRef<CloudAuthSession | null>(null);
     const onApplyRef = useRef(onApplySnapshot);
     const ctxRef = useRef({masterKeyHex, items, metadata, lockBehavior, commonTags});
     const didAutoPullRef = useRef(false);
@@ -90,8 +91,8 @@ export function useCloudSync({
     }, [stored]);
 
     useEffect(() => {
-        sessionRef.current = ephemeralSession ?? stored.session;
-    }, [ephemeralSession, stored.session]);
+        sessionRef.current = ephemeralSession;
+    }, [ephemeralSession]);
 
     useEffect(() => {
         onApplyRef.current = onApplySnapshot;
@@ -130,11 +131,15 @@ export function useCloudSync({
         setClientIdsEpoch(value => value + 1);
     };
 
-    const persistSession = (session: CloudAuthSession, extra?: Partial<CloudSyncStoredState>) => {
-        const storedSession = session.provider === 'google-drive' ? null : session;
-        setEphemeralSession(session.provider === 'google-drive' ? session : null);
+    const rememberSession = (
+        session: CloudAuthSession,
+        extra?: Partial<Omit<CloudSyncStoredState, 'v' | 'session'>>
+    ) => {
+        setEphemeralSession(session);
         sessionRef.current = session;
-        persist(patchCloudSyncState({session: storedSession, ...extra}));
+        if (extra) {
+            persist(patchCloudSyncState(extra));
+        }
     };
 
     const pushContext = (): CloudPushContext | null => {
@@ -182,7 +187,7 @@ export function useCloudSync({
 
         if (result.status === 'applied') {
             await onApplyRef.current(result.snapshot);
-            persistSession(fresh, {
+            rememberSession(fresh, {
                 localRevision: result.snapshot.updatedAt,
                 lastPullAt: new Date().toISOString()
             });
@@ -192,7 +197,7 @@ export function useCloudSync({
             return;
         }
 
-        persistSession(fresh);
+        rememberSession(fresh);
 
         if (result.status === 'empty') {
             if (mode === 'manual') {
@@ -205,17 +210,25 @@ export function useCloudSync({
         setLastResult(`Local vault is already up to date with ${transport.label}.`);
     };
 
+    const authorize = async (
+        providerId: CloudProviderId
+    ): Promise<{transport: CloudTransport; session: CloudAuthSession}> => {
+        const transport = requireTransport(providerId);
+        const session = await transport.authorize();
+        rememberSession(session);
+        return {transport, session};
+    };
+
     const connect = async (providerId: CloudProviderId, options?: {pull?: boolean; pin?: string}) => {
         setError(null);
         setLastResult(null);
         setStatus('connecting');
         try {
-            const transport = requireTransport(providerId);
-            const session = await transport.authorize();
-            persistSession(session);
-            if (options?.pull !== false) {
+            const {transport, session} = await authorize(providerId);
+            const shouldPull = options?.pull ?? storedRef.current.autoSync;
+            if (shouldPull) {
                 setStatus('pulling');
-                await pullWithSession(transport, session, 'auto', options?.pin);
+                await pullWithSession(transport, session, storedRef.current.autoSync ? 'auto' : 'manual', options?.pin);
             } else {
                 setLastResult(`Connected to ${transport.label}.`);
             }
@@ -231,21 +244,30 @@ export function useCloudSync({
     const disconnect = () => {
         setEphemeralSession(null);
         sessionRef.current = null;
-        persist(clearCloudSyncAuth());
         setError(null);
-        setLastResult('Cloud drive disconnected on this device. Files on the drive are unchanged.');
+        setLastResult('Google Drive disconnected in this browser session. Files on the drive are unchanged.');
+        setStatus('idle');
+    };
+
+    const reset = () => {
+        if (pushTimerRef.current != null) {
+            window.clearTimeout(pushTimerRef.current);
+            pushTimerRef.current = null;
+        }
+        didAutoPullRef.current = false;
+        inFlightRef.current = false;
+        setEphemeralSession(null);
+        sessionRef.current = null;
+        persist(clearCloudSyncState());
+        setError(null);
+        setLastResult(null);
         setStatus('idle');
     };
 
     const pull = async (providerId?: CloudProviderId, options?: {pin?: string}) => {
         setError(null);
         setLastResult(null);
-        const requested = providerId ?? sessionRef.current?.provider;
-        if (!requested) {
-            const message = 'Choose a cloud drive first.';
-            setError(message);
-            throw new Error(message);
-        }
+        const requested = providerId ?? sessionRef.current?.provider ?? GOOGLE_DRIVE;
 
         setStatus('pulling');
         try {
@@ -253,8 +275,7 @@ export function useCloudSync({
             let session = sessionRef.current;
             if (!session || session.provider !== requested) {
                 setStatus('connecting');
-                session = await transport.authorize();
-                persistSession(session);
+                session = (await authorize(requested)).session;
                 setStatus('pulling');
             }
             await pullWithSession(transport, session, 'manual', options?.pin);
@@ -279,40 +300,72 @@ export function useCloudSync({
             const updatedAt = new Date().toISOString();
             const {result, session: fresh} = await pushVaultToCloud(transport, session, pushContext(), updatedAt);
             if (result.status === 'pushed') {
-                persistSession(fresh, {lastPushAt: updatedAt, localRevision: updatedAt});
+                rememberSession(fresh, {lastPushAt: updatedAt, localRevision: updatedAt});
                 setLastResult(`Pushed vault to ${transport.label}.`);
             } else {
-                persistSession(fresh);
+                rememberSession(fresh);
             }
             setStatus('idle');
         } catch (err) {
             setStatus('idle');
             setError(errorMessage(err, 'Failed to push the vault to the cloud drive.'));
+            throw err instanceof Error
+                ? err
+                : new Error(errorMessage(err, 'Failed to push the vault to the cloud drive.'));
         } finally {
             inFlightRef.current = false;
         }
     };
 
+    const push = async () => {
+        setError(null);
+        setLastResult(null);
+        try {
+            if (!sessionRef.current) {
+                setStatus('connecting');
+                await authorize(GOOGLE_DRIVE);
+            }
+            await pushNow();
+        } catch (err) {
+            setStatus('idle');
+            const message = errorMessage(err, 'Failed to push the vault to the cloud drive.');
+            setError(message);
+            throw err instanceof Error ? err : new Error(message);
+        }
+    };
+
     const schedulePush = () => {
+        if (!storedRef.current.autoSync) return;
         if (!sessionRef.current) return;
         if (pushTimerRef.current != null) {
             window.clearTimeout(pushTimerRef.current);
         }
         pushTimerRef.current = window.setTimeout(() => {
             pushTimerRef.current = null;
-            void pushNow();
+            void pushNow().catch(() => {
+                // Error is stored on the hook for the drive panel.
+            });
         }, PUSH_DEBOUNCE_MS);
     };
 
+    const setAutoSync = (enabled: boolean) => {
+        persist(patchCloudSyncState({autoSync: enabled}));
+        if (!enabled && pushTimerRef.current != null) {
+            window.clearTimeout(pushTimerRef.current);
+            pushTimerRef.current = null;
+        }
+    };
+
     useEffect(() => {
-        if (!vaultUnlocked || didAutoPullRef.current) return;
-        didAutoPullRef.current = true;
+        if (!vaultUnlocked || !stored.autoSync) return;
+        if (didAutoPullRef.current) return;
         const session = sessionRef.current;
         if (!session) return;
 
         const transport = transportById.get(session.provider);
         if (!transport?.isConfigured()) return;
 
+        didAutoPullRef.current = true;
         setStatus('pulling');
         void pullWithSession(transport, session, 'auto')
             .catch(err => {
@@ -321,26 +374,30 @@ export function useCloudSync({
             .finally(() => {
                 setStatus('idle');
             });
-        // Run once after this device is unlocked (master key in memory).
+        // Pull once per unlock session when automatic sync is on and Google is authorized.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [vaultUnlocked]);
+    }, [vaultUnlocked, stored.autoSync]);
 
     const clearError = () => setError(null);
 
     return {
         providers: providerList(resolvedTransports),
-        session: ephemeralSession ?? stored.session,
+        session: ephemeralSession,
         localRevision: stored.localRevision,
         lastPushAt: stored.lastPushAt,
         lastPullAt: stored.lastPullAt,
+        autoSync: stored.autoSync,
         status,
         error,
         lastResult,
         isBusy: status !== 'idle',
         connect,
         disconnect,
+        reset,
         pull,
+        push,
         saveClientId,
+        setAutoSync,
         schedulePush,
         clearError
     };

@@ -8,7 +8,13 @@ import type {
     VaultState
 } from '../types/vault';
 import type {CloudVaultSnapshot} from '../types/cloudSync';
-import {decryptMasterKey, deriveKeyFromPin, deriveKeyFromWebAuthnPrf, hexToArrayBuffer} from '../lib/crypto';
+import {
+    decryptMasterKey,
+    deriveKeyFromPin,
+    deriveKeyFromWebAuthnPrf,
+    encryptMasterKey,
+    hexToArrayBuffer
+} from '../lib/crypto';
 import {clearVaultStorage, getEncryptedItemsFromDB, saveEncryptedItemsToDB} from '../lib/indexedDB';
 import {STORAGE_KEYS} from '../lib/vaultStorageKeys';
 import {
@@ -21,7 +27,7 @@ import {
     saveVaultMetadata
 } from '../lib/vaultMigration';
 import {decryptItemsInMemory, serializeAndEncryptItems} from '../lib/vaultItems';
-import {getWebAuthnAssertion} from '../lib/webauthn';
+import {getWebAuthnAssertion, registerWebAuthnCredential} from '../lib/webauthn';
 import {isBiometricSimulatorEnabled} from '../lib/biometricSimulator';
 import {useAutoLock} from './useAutoLock';
 
@@ -188,6 +194,32 @@ export function useVault(options: UseVaultOptions = {}) {
         setCopiedKeyId(null);
         setPendingAction(null);
         setShowUnlockModal(false);
+        setError(null);
+    };
+
+    const enrollWebAuthn = async () => {
+        if (!masterKey || !metadata) {
+            throw new Error('Unlock the vault before enabling biometrics.');
+        }
+
+        const res = await registerWebAuthnCredential();
+        if (!res.prfOutput || !res.credentialId || !res.prfSaltHex) {
+            throw new Error(res.errorMessage ?? 'Biometric enrollment failed.');
+        }
+
+        const kek = await deriveKeyFromWebAuthnPrf(res.prfOutput);
+        const encrypted = await encryptMasterKey(masterKey, kek);
+        const next: VaultMetadata = {
+            ...metadata,
+            hasWebAuthn: true,
+            webauthnCredentialId: res.credentialId,
+            webauthnKeySource: 'prf',
+            webauthnPrfSalt: res.prfSaltHex,
+            webauthnIv: encrypted.iv,
+            encryptedMasterKeyWithWebAuthn: encrypted.ciphertext
+        };
+        saveVaultMetadata(next);
+        setMetadata(next);
         setError(null);
     };
 
@@ -448,6 +480,7 @@ export function useVault(options: UseVaultOptions = {}) {
         unlockWithWebAuthn,
         lock,
         resetVault,
+        enrollWebAuthn,
         addItem,
         updateItem,
         deleteItem,

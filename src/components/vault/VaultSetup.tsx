@@ -1,6 +1,6 @@
-import {useState} from 'react';
+import {useState, type ReactNode} from 'react';
 import {motion} from 'motion/react';
-import {ChevronRight, Cloud, FileKey, Fingerprint, Key, Lock, RefreshCw} from 'lucide-react';
+import {ChevronRight, Cloud, FileKey, Fingerprint, Key, Lock, Plus, RefreshCw, type LucideIcon} from 'lucide-react';
 import type {ApiKeyItem, VaultMetadata, WebAuthnKeySource} from '../../types/vault';
 import type {UseCloudSyncReturn} from '../../hooks/useCloudSync';
 import {
@@ -16,7 +16,7 @@ import {
     isRunningInIframe,
     isWebAuthnSupported,
     registerWebAuthnCredential,
-    WEBAUTHN_USER_NAME_MAX_LENGTH
+    WEBAUTHN_USER_NAME
 } from '../../lib/webauthn';
 import {isBiometricSimulatorEnabled} from '../../lib/biometricSimulator';
 import BiometricSimulator from './BiometricSimulator';
@@ -32,9 +32,72 @@ type VaultSetupProps = {
     cloud: UseCloudSyncReturn;
 };
 
+type SetupMode = 'choose' | 'create' | 'existing' | 'restore' | 'cloud';
+
+function SetupFrame({children, align = 'center'}: {children: ReactNode; align?: 'center' | 'start'}) {
+    return (
+        <div
+            className={`flex flex-col items-center ${align === 'start' ? 'justify-start' : 'justify-center'} min-h-full p-4 safe-pt safe-pb overflow-y-auto overscroll-y-contain`}
+        >
+            <motion.div
+                initial={{opacity: 0, y: 16}}
+                animate={{opacity: 1, y: 0}}
+                transition={{duration: 0.35, ease: [0.23, 1, 0.32, 1]}}
+                className="w-full max-w-md overflow-hidden bg-surface-900 border border-surface-700 rounded-2xl"
+            >
+                <div className="h-1.5 hazard-stripe" aria-hidden />
+                <div className="p-5 sm:p-6">{children}</div>
+            </motion.div>
+        </div>
+    );
+}
+
+function SetupPathButton({
+    icon: Icon,
+    title,
+    hint,
+    onClick
+}: {
+    icon: LucideIcon;
+    title: string;
+    hint: string;
+    onClick: () => void;
+}) {
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            className="w-full flex items-start gap-3 p-3 min-h-14 rounded-lg border border-surface-700 hover:border-accent/40 hover:bg-accent-muted text-left cursor-pointer pressable transition"
+        >
+            <Icon className="w-4 h-4 text-accent mt-0.5 shrink-0" aria-hidden />
+            <span className="min-w-0 flex-1">
+                <span className="block text-sm text-surface-100">{title}</span>
+                <span className="block text-[11px] text-surface-400 mt-0.5 leading-relaxed">{hint}</span>
+            </span>
+            <ChevronRight className="w-4 h-4 text-surface-500 mt-0.5 shrink-0" aria-hidden />
+        </button>
+    );
+}
+
+function SetupBrand({title, description}: {title: string; description: string}) {
+    return (
+        <div className="flex flex-col items-center mb-6 text-center">
+            <img
+                src={`${import.meta.env.BASE_URL}kbox.webp`}
+                alt="KBox"
+                className="h-16 w-16 mb-4 rounded-2xl object-cover"
+                width={64}
+                height={64}
+                decoding="async"
+            />
+            <h1 className="font-display text-xl font-semibold tracking-tight text-surface-100">{title}</h1>
+            <p className="text-xs text-surface-400 mt-1.5 max-w-xs leading-relaxed">{description}</p>
+        </div>
+    );
+}
+
 export default function VaultSetup({onInitialized, onRestored, cloud}: VaultSetupProps) {
-    const [mode, setMode] = useState<'setup' | 'restore' | 'cloud'>('setup');
-    const [username, setUsername] = useState('vault-owner');
+    const [mode, setMode] = useState<SetupMode>('choose');
     const [pin, setPin] = useState('');
     const [confirmPin, setConfirmPin] = useState('');
     const simulatorEnabled = isBiometricSimulatorEnabled();
@@ -47,14 +110,6 @@ export default function VaultSetup({onInitialized, onRestored, cloud}: VaultSetu
 
     const validateForm = (): boolean => {
         setError(null);
-        if (!username.trim()) {
-            setError('Please provide an owner identifier.');
-            return false;
-        }
-        if ([...username.trim()].length > WEBAUTHN_USER_NAME_MAX_LENGTH) {
-            setError(`Owner name must be ${WEBAUTHN_USER_NAME_MAX_LENGTH} characters or fewer.`);
-            return false;
-        }
         const pinError = validatePinStrength(pin);
         if (pinError) {
             setError(pinError);
@@ -90,7 +145,7 @@ export default function VaultSetup({onInitialized, onRestored, cloud}: VaultSetu
 
             if (enableBiometrics) {
                 if (nativeBiometricsSupported) {
-                    const res = await registerWebAuthnCredential(username.trim());
+                    const res = await registerWebAuthnCredential();
                     if (res.prfOutput && res.credentialId && res.prfSaltHex) {
                         await completeWithBiometrics(
                             masterKeyHex,
@@ -189,24 +244,67 @@ export default function VaultSetup({onInitialized, onRestored, cloud}: VaultSetu
         );
     };
 
+    if (mode === 'choose') {
+        return (
+            <SetupFrame>
+                <SetupBrand
+                    title="Welcome to kbox"
+                    description="End-to-end encrypted API keys. No kbox server. Choose how this device should start."
+                />
+                <div className="space-y-2">
+                    <SetupPathButton
+                        icon={Plus}
+                        title="Create a new vault"
+                        hint="Set a PIN and optional Face ID on this device."
+                        onClick={() => setMode('create')}
+                    />
+                    <SetupPathButton
+                        icon={FileKey}
+                        title="I already have a vault"
+                        hint="Bring it here with a recovery file or Google Drive."
+                        onClick={() => setMode('existing')}
+                    />
+                </div>
+            </SetupFrame>
+        );
+    }
+
+    if (mode === 'existing') {
+        return (
+            <SetupFrame>
+                <SetupBrand
+                    title="Bring your vault here"
+                    description="Open a recovery file or pull the Google Drive copy. That becomes the vault on this device."
+                />
+                <div className="space-y-2">
+                    <SetupPathButton
+                        icon={FileKey}
+                        title="Recovery file"
+                        hint="Decrypt a .kboxbackup, then set a PIN for this device."
+                        onClick={() => setMode('restore')}
+                    />
+                    <SetupPathButton
+                        icon={Cloud}
+                        title="Google Drive"
+                        hint="Pull the encrypted copy. Use the vault PIN from the device that pushed it."
+                        onClick={() => setMode('cloud')}
+                    />
+                </div>
+                <Button type="button" variant="ghost" fullWidth className="mt-4" onClick={() => setMode('choose')}>
+                    Back
+                </Button>
+            </SetupFrame>
+        );
+    }
+
     if (mode === 'cloud') {
         return (
-            <div className="flex flex-col items-center justify-start min-h-full p-4 safe-pt safe-pb overflow-y-auto overscroll-y-contain">
-                <motion.div
-                    initial={{opacity: 0, y: 16}}
-                    animate={{opacity: 1, y: 0}}
-                    transition={{duration: 0.35, ease: [0.23, 1, 0.32, 1]}}
-                    className="w-full max-w-md overflow-hidden bg-surface-900 border border-surface-700 rounded-2xl"
-                >
-                    <div className="h-1.5 hazard-stripe" aria-hidden />
-                    <div className="p-5 sm:p-6">
-                        <VaultCloudSync cloud={cloud} variant="setup" />
-                        <Button type="button" variant="ghost" fullWidth onClick={() => setMode('setup')}>
-                            Back to setup
-                        </Button>
-                    </div>
-                </motion.div>
-            </div>
+            <SetupFrame align="start">
+                <VaultCloudSync cloud={cloud} variant="setup" />
+                <Button type="button" variant="ghost" fullWidth onClick={() => setMode('existing')}>
+                    Back
+                </Button>
+            </SetupFrame>
         );
     }
 
@@ -219,190 +317,140 @@ export default function VaultSetup({onInitialized, onRestored, cloud}: VaultSetu
                     transition={{duration: 0.35, ease: [0.23, 1, 0.32, 1]}}
                     className="w-full max-w-md"
                 >
-                    <VaultRestore onRestored={onRestored} onCancel={() => setMode('setup')} />
+                    <VaultRestore onRestored={onRestored} onCancel={() => setMode('existing')} />
                 </motion.div>
             </div>
         );
     }
 
     return (
-        <div className="flex flex-col items-center justify-center min-h-full p-4 safe-pt safe-pb overflow-y-auto overscroll-y-contain">
-            <motion.div
-                initial={{opacity: 0, y: 16}}
-                animate={{opacity: 1, y: 0}}
-                transition={{duration: 0.35, ease: [0.23, 1, 0.32, 1]}}
-                className="w-full max-w-md overflow-hidden bg-surface-900 border border-surface-700 rounded-2xl"
+        <SetupFrame>
+            <button
+                type="button"
+                onClick={() => {
+                    setError(null);
+                    setMode('choose');
+                }}
+                className="text-xs text-surface-400 hover:text-surface-200 mb-4 cursor-pointer pressable"
             >
-                <div className="h-1.5 hazard-stripe" aria-hidden />
+                Back
+            </button>
+            <SetupBrand
+                title="Create a new vault"
+                description="Your master key stays in this browser. PIN unlocks this device; Face ID is optional and stays here."
+            />
 
-                <div className="p-5 sm:p-6">
-                    <div className="flex flex-col items-center mb-6 text-center">
-                        <img
-                            src={`${import.meta.env.BASE_URL}kbox.webp`}
-                            alt="KBox"
-                            className="h-16 w-16 mb-4 rounded-2xl object-cover"
-                            width={64}
-                            height={64}
-                            decoding="async"
-                        />
-                        <h1 className="font-display text-xl font-semibold tracking-tight text-surface-100">
-                            Set up your vault
-                        </h1>
-                        <p className="text-xs text-surface-400 mt-1.5 max-w-xs leading-relaxed">
-                            End-to-end encrypted API keys, stored only on this device. Your master key never leaves the
-                            browser.
-                        </p>
-                    </div>
+            {error && (
+                <Alert tone="error" className="mb-4">
+                    {error}
+                </Alert>
+            )}
 
-                    {error && (
-                        <Alert tone="error" className="mb-4">
-                            {error}
-                        </Alert>
-                    )}
-
-                    <form onSubmit={handleInitialize} className="space-y-4">
-                        <TextField
-                            id="vault-owner-name"
-                            label="Owner name"
-                            trailingLabel="For WebAuthn"
-                            hint="English keyboard by default. Chinese and other languages are fine."
-                            value={username}
-                            onChange={e => setUsername(e.target.value)}
-                            placeholder="e.g. cloud-master"
-                            lang="en"
-                            autoCapitalize="none"
-                            autoCorrect="off"
-                            autoComplete="username"
-                            spellCheck={false}
-                            maxLength={WEBAUTHN_USER_NAME_MAX_LENGTH}
-                            required
-                        />
-
-                        <div className="grid grid-cols-2 gap-3">
-                            <TextField
-                                label="PIN"
-                                trailingLabel={<Key className="w-3 h-3 text-surface-400" aria-hidden />}
-                                type="password"
-                                inputMode="numeric"
-                                autoComplete="new-password"
-                                maxLength={PIN_MAX_LENGTH}
-                                value={pin}
-                                onChange={e => setPin(e.target.value)}
-                                placeholder="••••••"
-                                className="[&_input]:font-mono [&_input]:text-center [&_input]:tracking-widest"
-                                required
-                            />
-                            <TextField
-                                label="Confirm PIN"
-                                type="password"
-                                inputMode="numeric"
-                                autoComplete="new-password"
-                                maxLength={PIN_MAX_LENGTH}
-                                value={confirmPin}
-                                onChange={e => setConfirmPin(e.target.value)}
-                                placeholder="••••••"
-                                className="[&_input]:font-mono [&_input]:text-center [&_input]:tracking-widest"
-                                required
-                            />
-                        </div>
-
-                        <div className="p-3 bg-surface-950 rounded-lg border border-accent/35 flex items-center justify-between gap-3">
-                            <div className="flex items-start gap-2.5 min-w-0">
-                                <Fingerprint className="w-5 h-5 text-accent mt-0.5 shrink-0" aria-hidden />
-                                <div>
-                                    <h2 className="text-xs font-semibold text-surface-100">
-                                        Face ID / Touch ID
-                                        {canEnrollBiometrics ? (
-                                            <span className="ml-1.5 text-[10px] font-normal text-accent">
-                                                Recommended
-                                            </span>
-                                        ) : null}
-                                    </h2>
-                                    <p className="text-[11px] text-surface-400 leading-normal mt-0.5">
-                                        {nativeBiometricsSupported
-                                            ? 'Preferred unlock. PIN stays as backup recovery on this device.'
-                                            : simulatorEnabled
-                                              ? 'Native biometrics unavailable — DEV sandbox simulator can be used.'
-                                              : 'Native biometrics unavailable on this device. Use your PIN.'}
-                                    </p>
-                                </div>
-                            </div>
-                            <label
-                                className={`relative inline-flex items-center select-none shrink-0 min-h-11 px-1 ${
-                                    canEnrollBiometrics ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'
-                                }`}
-                            >
-                                <input
-                                    type="checkbox"
-                                    checked={enableBiometrics && canEnrollBiometrics}
-                                    onChange={() => {
-                                        if (!canEnrollBiometrics) return;
-                                        setEnableBiometrics(!enableBiometrics);
-                                    }}
-                                    disabled={!canEnrollBiometrics}
-                                    className="sr-only peer"
-                                    aria-label="Enable biometrics"
-                                />
-                                <span className="relative w-10 h-6 bg-surface-700 rounded-full peer-checked:bg-accent peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent transition-colors peer-disabled:opacity-80">
-                                    <span
-                                        className={`absolute top-1 left-1 h-4 w-4 rounded-full transition-transform ${
-                                            enableBiometrics && canEnrollBiometrics
-                                                ? 'translate-x-4 bg-on-accent'
-                                                : 'translate-x-0 bg-surface-300'
-                                        }`}
-                                    />
-                                </span>
-                            </label>
-                        </div>
-
-                        <div className="p-3 rounded-lg border border-surface-700/70 text-[11px] text-surface-400 leading-relaxed flex items-start gap-2">
-                            <Lock className="w-3.5 h-3.5 text-surface-400 shrink-0 mt-0.5" aria-hidden />
-                            <span>
-                                Secret values are encrypted locally with your PIN (and optional biometrics). Labels and
-                                tags stay readable while locked.
-                            </span>
-                        </div>
-
-                        <Button type="submit" fullWidth disabled={loading}>
-                            {loading ? (
-                                <>
-                                    <RefreshCw className="w-3.5 h-3.5 animate-spin" aria-hidden />
-                                    Creating vault…
-                                </>
-                            ) : (
-                                <>
-                                    Create secure vault
-                                    <ChevronRight className="w-3.5 h-3.5" aria-hidden />
-                                </>
-                            )}
-                        </Button>
-
-                        <button
-                            type="button"
-                            onClick={() => setMode('restore')}
-                            className="w-full inline-flex items-center justify-center gap-1.5 text-xs text-surface-400 hover:text-surface-200 py-2 cursor-pointer pressable"
-                        >
-                            <FileKey className="w-3.5 h-3.5" aria-hidden />
-                            Restore from recovery file
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setMode('cloud')}
-                            className="w-full inline-flex items-center justify-center gap-1.5 text-xs text-surface-400 hover:text-surface-200 py-2 cursor-pointer pressable"
-                        >
-                            <Cloud className="w-3.5 h-3.5" aria-hidden />
-                            Pull from Google Drive or OneDrive
-                        </button>
-                    </form>
+            <form onSubmit={handleInitialize} className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                    <TextField
+                        label="PIN"
+                        trailingLabel={<Key className="w-3 h-3 text-surface-400" aria-hidden />}
+                        type="password"
+                        inputMode="numeric"
+                        autoComplete="new-password"
+                        maxLength={PIN_MAX_LENGTH}
+                        value={pin}
+                        onChange={e => setPin(e.target.value)}
+                        placeholder="••••••"
+                        className="[&_input]:font-mono [&_input]:text-center [&_input]:tracking-widest"
+                        required
+                    />
+                    <TextField
+                        label="Confirm PIN"
+                        type="password"
+                        inputMode="numeric"
+                        autoComplete="new-password"
+                        maxLength={PIN_MAX_LENGTH}
+                        value={confirmPin}
+                        onChange={e => setConfirmPin(e.target.value)}
+                        placeholder="••••••"
+                        className="[&_input]:font-mono [&_input]:text-center [&_input]:tracking-widest"
+                        required
+                    />
                 </div>
-            </motion.div>
+
+                <div className="p-3 bg-surface-950 rounded-lg border border-accent/35 flex items-center justify-between gap-3">
+                    <div className="flex items-start gap-2.5 min-w-0">
+                        <Fingerprint className="w-5 h-5 text-accent mt-0.5 shrink-0" aria-hidden />
+                        <div>
+                            <h2 className="text-xs font-semibold text-surface-100">
+                                Face ID / Touch ID
+                                {canEnrollBiometrics ? (
+                                    <span className="ml-1.5 text-[10px] font-normal text-accent">Recommended</span>
+                                ) : null}
+                            </h2>
+                            <p className="text-[11px] text-surface-400 leading-normal mt-0.5">
+                                {nativeBiometricsSupported
+                                    ? 'Preferred unlock. PIN stays as backup recovery on this device.'
+                                    : simulatorEnabled
+                                      ? 'Native biometrics unavailable — DEV sandbox simulator can be used.'
+                                      : 'Native biometrics unavailable on this device. Use your PIN.'}
+                            </p>
+                        </div>
+                    </div>
+                    <label
+                        className={`relative inline-flex items-center select-none shrink-0 min-h-11 px-1 ${
+                            canEnrollBiometrics ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'
+                        }`}
+                    >
+                        <input
+                            type="checkbox"
+                            checked={enableBiometrics && canEnrollBiometrics}
+                            onChange={() => {
+                                if (!canEnrollBiometrics) return;
+                                setEnableBiometrics(!enableBiometrics);
+                            }}
+                            disabled={!canEnrollBiometrics}
+                            className="sr-only peer"
+                            aria-label="Enable biometrics"
+                        />
+                        <span className="relative w-10 h-6 bg-surface-700 rounded-full peer-checked:bg-accent peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent transition-colors peer-disabled:opacity-80">
+                            <span
+                                className={`absolute top-1 left-1 h-4 w-4 rounded-full transition-transform ${
+                                    enableBiometrics && canEnrollBiometrics
+                                        ? 'translate-x-4 bg-on-accent'
+                                        : 'translate-x-0 bg-surface-300'
+                                }`}
+                            />
+                        </span>
+                    </label>
+                </div>
+
+                <div className="p-3 rounded-lg border border-surface-700/70 text-[11px] text-surface-400 leading-relaxed flex items-start gap-2">
+                    <Lock className="w-3.5 h-3.5 text-surface-400 shrink-0 mt-0.5" aria-hidden />
+                    <span>
+                        Secret values are encrypted locally with your PIN (and optional biometrics). Labels and tags
+                        stay readable while locked.
+                    </span>
+                </div>
+
+                <Button type="submit" fullWidth disabled={loading}>
+                    {loading ? (
+                        <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" aria-hidden />
+                            Creating vault…
+                        </>
+                    ) : (
+                        <>
+                            Create secure vault
+                            <ChevronRight className="w-3.5 h-3.5" aria-hidden />
+                        </>
+                    )}
+                </Button>
+            </form>
 
             <BiometricSimulator
                 isOpen={showSimulator && simulatorEnabled}
                 onClose={() => setShowSimulator(false)}
                 onSuccess={handleSimulatorSuccess}
                 onFail={msg => setError(msg)}
-                username={username}
+                username={WEBAUTHN_USER_NAME}
                 actionType="register"
                 fallbackToPin={() => {
                     setShowSimulator(false);
@@ -410,6 +458,6 @@ export default function VaultSetup({onInitialized, onRestored, cloud}: VaultSetu
                     setError('Continuing with PIN only.');
                 }}
             />
-        </div>
+        </SetupFrame>
     );
 }

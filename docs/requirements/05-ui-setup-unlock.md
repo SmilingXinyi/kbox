@@ -1,5 +1,7 @@
 # 05 — UI：Vault Setup & Unlock
 
+> 历史阶段文档。现网 PIN 为 **6–12**（非 4–12）；BiometricSimulator 已作为 DEV 门控存在。口径见 [10-direction.md](./10-direction.md)。
+
 ## Goal
 
 实现首次初始化与解锁界面（全屏 + Modal），英文文案，Tailwind + lucide-react + motion；无 BiometricSimulator。
@@ -37,7 +39,7 @@
 
 ### VaultSetup
 
-- [ ] 收集：display/owner name、PIN、confirm PIN、可选「Enable biometric」
+- [ ] 收集：PIN、confirm PIN、可选「Enable biometric」（WebAuthn user.name 用固定默认值，不向用户收集）
 - [ ] PIN 长度 4–12；两次一致；错误英文提示
 - [ ] 生成 `masterKeyHex` + `saltHex`；`deriveKeyFromPin` → `encryptMasterKey` → 组装 `VaultMetadata`
 - [ ] 若启用 WebAuthn：调用 `registerWebAuthnCredential`；成功则用 `deriveKeyFromWebAuthnSignatureHex` 加密第二份 master key；失败则英文错误，可回退仅 PIN
@@ -80,4 +82,4 @@
 ## Notes
 
 - Demo Setup 内联了 WebAuthn KEK；kbox 必须调用 `lib/crypto` 统一函数。
-- Owner name 主要用于 WebAuthn user.name；可写入 metadata 扩展字段若需要 —— **首版可不持久化 owner name**（demo 亦未写入 VaultMetadata），仅用于注册 WebAuthn。
+- WebAuthn `user.name` / `displayName` 使用固定默认值 `kbox`，不向用户收集、不写入 vault metadata。

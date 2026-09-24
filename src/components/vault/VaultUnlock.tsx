@@ -3,6 +3,7 @@ import {motion} from 'motion/react';
 import {Fingerprint, Key, Lock, RefreshCw, X} from 'lucide-react';
 import type {VaultMetadata, ResidualUnlockResult} from '../../types/vault';
 import {PIN_MAX_LENGTH} from '../../lib/crypto';
+import {WEBAUTHN_USER_NAME} from '../../lib/webauthn';
 import {isBiometricSimulatorEnabled} from '../../lib/biometricSimulator';
 import BiometricSimulator from './BiometricSimulator';
 import Alert from '../ui/Alert';
@@ -226,7 +227,7 @@ export default function VaultUnlock({
                         void handleBiometricUnlock(sig);
                     }}
                     onFail={msg => setError(msg)}
-                    username="vault-owner"
+                    username={WEBAUTHN_USER_NAME}
                     actionType="assert"
                     fallbackToPin={() => {
                         setShowSimulator(false);

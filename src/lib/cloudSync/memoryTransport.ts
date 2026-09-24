@@ -5,8 +5,8 @@ type MemoryStore = {
 };
 
 export function createMemoryTransport(
-    id: CloudProviderId,
-    label = id === 'google-drive' ? 'Google Drive' : 'OneDrive'
+    id: CloudProviderId = 'google-drive',
+    label = 'Google Drive'
 ): CloudTransport & {store: MemoryStore} {
     const store: MemoryStore = {body: null};
 

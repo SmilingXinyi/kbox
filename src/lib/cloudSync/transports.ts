@@ -1,13 +1,11 @@
 import type {CloudProviderId, CloudTransport} from '../../types/cloudSync';
 import {googleDriveTransport} from './googleDrive';
-import {oneDriveTransport} from './oneDrive';
 
 const TRANSPORTS: Record<CloudProviderId, CloudTransport> = {
-    'google-drive': googleDriveTransport,
-    onedrive: oneDriveTransport
+    'google-drive': googleDriveTransport
 };
 
-export const CLOUD_PROVIDER_IDS: CloudProviderId[] = ['google-drive', 'onedrive'];
+export const CLOUD_PROVIDER_IDS: CloudProviderId[] = ['google-drive'];
 
 export function getCloudTransport(id: CloudProviderId): CloudTransport {
     return TRANSPORTS[id];

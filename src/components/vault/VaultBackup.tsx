@@ -70,12 +70,12 @@ export function VaultBackupExport({masterKeyHex, items, lockBehavior, commonTags
     };
 
     return (
-        <section className="space-y-3 mb-6">
+        <section className="space-y-3 mb-6 md:mb-0">
             <div className="flex items-center gap-2 text-sm font-medium text-surface-100">
                 <Shield className="w-4 h-4 text-accent" aria-hidden />
                 <h3>Account recovery</h3>
             </div>
-            <p className="text-[11px] text-surface-400 leading-relaxed">
+            <p className="text-[11px] text-surface-400 leading-relaxed max-w-prose">
                 Export an encrypted recovery file. If you forget your PIN or switch devices, restore with this file and
                 its passphrase. Biometrics stay on this device and are not included.
             </p>
@@ -92,26 +92,36 @@ export function VaultBackupExport({masterKeyHex, items, lockBehavior, commonTags
             )}
 
             <form onSubmit={e => void handleExport(e)} className="space-y-3">
-                <TextField
-                    label="Recovery passphrase"
-                    type="password"
-                    autoComplete="new-password"
-                    value={passphrase}
-                    onChange={e => setPassphrase(e.target.value)}
-                    placeholder={`At least ${RECOVERY_PASSPHRASE_MIN_LENGTH} characters`}
-                    hint="Different from your unlock PIN. You will need this to restore."
-                    required
-                />
-                <TextField
-                    label="Confirm passphrase"
-                    type="password"
-                    autoComplete="new-password"
-                    value={confirm}
-                    onChange={e => setConfirm(e.target.value)}
-                    placeholder="••••••••"
-                    required
-                />
-                <Button type="submit" variant="secondary" fullWidth disabled={loading || !passphrase || !confirm}>
+                <div className="grid gap-3 md:grid-cols-2">
+                    <TextField
+                        label="Recovery passphrase"
+                        type="password"
+                        autoComplete="new-password"
+                        value={passphrase}
+                        onChange={e => setPassphrase(e.target.value)}
+                        placeholder={`At least ${RECOVERY_PASSPHRASE_MIN_LENGTH} characters`}
+                        required
+                    />
+                    <TextField
+                        label="Confirm passphrase"
+                        type="password"
+                        autoComplete="new-password"
+                        value={confirm}
+                        onChange={e => setConfirm(e.target.value)}
+                        placeholder="Re-enter passphrase"
+                        required
+                    />
+                </div>
+                <p className="text-[11px] text-surface-400 leading-normal">
+                    Different from your unlock PIN. You will need this to restore.
+                </p>
+                <Button
+                    type="submit"
+                    variant="secondary"
+                    fullWidth
+                    className="md:w-auto"
+                    disabled={loading || !passphrase || !confirm}
+                >
                     {loading ? (
                         <>
                             <RefreshCw className="w-3.5 h-3.5 animate-spin" aria-hidden />
@@ -295,7 +305,7 @@ export default function VaultRestore({onRestored, onCancel}: VaultRestoreProps) 
                     </Button>
 
                     <Button type="button" variant="ghost" fullWidth onClick={onCancel} disabled={loading}>
-                        Back to setup
+                        Back
                     </Button>
                 </form>
             </div>

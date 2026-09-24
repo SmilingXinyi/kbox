@@ -4,18 +4,13 @@ import {RouterProvider} from 'react-router';
 import {router} from './router';
 import {registerServiceWorker} from './lib/registerServiceWorker';
 import {bindSafeAreaSync} from './lib/safeArea';
-import {completeCloudOAuthIfPopup} from './lib/cloudSync/oauthPkce';
 import './index.css';
 
-if (completeCloudOAuthIfPopup()) {
-    // OAuth popup only needs to post the code back to the opener.
-} else {
-    bindSafeAreaSync();
-    registerServiceWorker();
+bindSafeAreaSync();
+registerServiceWorker();
 
-    createRoot(document.getElementById('root')!).render(
-        <StrictMode>
-            <RouterProvider router={router} />
-        </StrictMode>
-    );
-}
+createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+        <RouterProvider router={router} />
+    </StrictMode>
+);

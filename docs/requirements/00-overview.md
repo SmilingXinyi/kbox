@@ -1,20 +1,22 @@
 # 00 — Overview：kbox API Key Vault
 
+> **历史主线（Phase 01–08）**。当前产品口径、减法与待确认项见 [10-direction.md](./10-direction.md)。冲突时以 10-direction 与代码为准（PIN **6–12**；无独立 `locked` 状态）。
+
 ## Goal
 
-将 `demo/api-key-safe` 迁移为 **kbox 主应用**（路由 `/`）：本地浏览器内的端到端加密 API Key 钱包。数据不出本地；主密钥仅在内存中，锁定后清除。
+将 `demo/api-key-safe` 迁移为 **kbox 主应用**（路由 `/`）：浏览器内端到端加密的 API Key 保险箱。**无 kbox 服务端**；主密钥仅在内存中，锁定后清除。数据移动（WebRTC / Drive / 恢复文件）是后来加上的可选能力，见 10-direction。
 
 ## Product summary
 
-| 能力         | 说明                                                               |
-| ------------ | ------------------------------------------------------------------ |
-| 金库初始化   | Owner 名、PIN（4–12 位）、可选 WebAuthn                            |
-| 解锁         | PIN 或 WebAuthn；支持全屏（迁移）与按需 Modal                      |
-| API Key CRUD | label（唯一）、tag、description、多行 secret（AK/SK 等）           |
-| 搜索 / 筛选  | 按 label / tag / description / key 值搜索；按 tag 筛选             |
-| View-only    | 已初始化且无 `masterKey` 时可浏览元数据；reveal/copy/edit 需先解锁 |
-| 自动锁定     | always / 30s / 1m / 5m / 仅手动                                    |
-| 重置         | 清除全部本地加密数据，回到 Setup                                   |
+| 能力         | 说明                                                                  |
+| ------------ | --------------------------------------------------------------------- |
+| 金库初始化   | Owner 名、PIN（6–12 位）、可选 WebAuthn                               |
+| 解锁         | PIN 或 WebAuthn；按需 Modal（历史文档中的全屏 `locked` 迁移已不使用） |
+| API Key CRUD | label（唯一）、tag、description、多行 secret（AK/SK 等）              |
+| 搜索 / 筛选  | 按 label / tag / description 搜索；解锁后可搜 secret；按 tag 筛选     |
+| View-only    | 已初始化且无 `masterKey` 时可浏览元数据；reveal/copy/edit 需先解锁    |
+| 自动锁定     | always / 30s / 1m / 5m / 仅手动                                       |
+| 重置         | 清除本机金库数据，回到 Setup                                          |
 
 ## Architecture
 
@@ -34,14 +36,14 @@ ApiKeyForm / ApiKeyCard / VaultSettings ──► 纯 UI + 回调
 ```text
 loading
   ├─► uninitialized   （无 metadata）
-  ├─► locked          （有 metadata + 待 v1 迁移）
   └─► unlocked        （有 v2 数据；masterKey 可为 null = view-only）
 
 uninitialized ──Setup──► unlocked (masterKey in memory)
-locked ──Unlock──► unlocked (migrate v1→v2)
-unlocked ──lock──► unlocked (masterKey=null) 或保持 view-only
+unlocked ──lock──► unlocked (masterKey=null，view-only)
 unlocked ──reset──► uninitialized
 ```
+
+（Phase 02 曾规划 `locked` 给 v1 全屏迁移；现网 Setup 只写 v2，类型里已无 `locked`。）
 
 ### Key hierarchy
 
@@ -57,15 +59,16 @@ Master Key (32-byte hex) ──AES-GCM──► 每个 KeyEntry.value（v2 逐�
 
 | 决策               | 结论                                          |
 | ------------------ | --------------------------------------------- |
-| 产品定位           | `/` 即金库主应用（替换 Home 占位）            |
+| 产品定位           | `/` 即金库主应用；**无服务端**，可选数据移动  |
 | UI 依赖            | Tailwind v4 + `lucide-react` + `motion`       |
 | 文案               | UI 与代码注释英文；需求文档可用中文           |
 | 初始化数据         | 空列表 + 空状态引导；**不**写入假密钥 starter |
-| BiometricSimulator | 主线不做 → 见 `99-backlog.md`                 |
-| PWA                | 主线不做 → 见 `99-backlog.md`                 |
+| BiometricSimulator | 已实现，仅 DEV / 显式 flag（见 10-direction） |
+| PWA                | 已实现，保留                                  |
 | demo 目录          | **不修改** `demo/`                            |
 | 包管理             | 仅 pnpm                                       |
 | Commit             | 仅用户明确要求时再提交                        |
+| 后续减法           | [10-direction.md](./10-direction.md)          |
 
 ## Target layout
 
@@ -105,6 +108,7 @@ src/
 | 07    | [07-settings-autolock.md](./07-settings-autolock.md) | Settings、自动锁定 UX           |
 | 08    | [08-polish-qa.md](./08-polish-qa.md)                 | 打磨、lint/build                |
 | 99    | [99-backlog.md](./99-backlog.md)                     | 后续项（不阻塞主线）            |
+| 10    | [10-direction.md](./10-direction.md)                 | 当前口径与减法（2026-09）       |
 
 总勾选表：[CHECKLIST.md](./CHECKLIST.md)
 
@@ -127,10 +131,10 @@ src/
 
 ## Out of scope (mainline)
 
-见 [99-backlog.md](./99-backlog.md)：PWA、BiometricSimulator、RP 服务端、子路由拆分、单元测试、加密备份导入导出。
+历史主线曾把 PWA / Simulator / 备份放进 backlog，后来都已做。当前「明确不做」与待确认见 [10-direction.md](./10-direction.md) 与 [99-backlog.md](./99-backlog.md)。
 
 ## Source of truth
 
-- 需求：本目录 `docs/requirements/*`
+- 需求：本目录 `docs/requirements/*`（产品口径以 [10-direction.md](./10-direction.md) 为准）
 - 参考实现：`demo/api-key-safe/src/**`（只读）
 - 项目规范：`AGENTS.md`（Phase 01 会更新样式节）

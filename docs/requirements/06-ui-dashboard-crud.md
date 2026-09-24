@@ -1,5 +1,7 @@
 # 06 — UI：Dashboard、CRUD、搜索与按需解锁
 
+> 历史阶段文档。现网无全屏 `locked` 路由分支；锁定即 dashboard view-only。口径见 [10-direction.md](./10-direction.md)。
+
 ## Goal
 
 实现金库主界面：列表、搜索筛选、新增/编辑表单、卡片展示（reveal/copy/edit/delete），以及按需解锁串联。

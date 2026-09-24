@@ -1,6 +1,6 @@
 # 99 — Backlog：后续项（不阻塞主线）
 
-> 这些能力来自 demo 或后续增强。主线 Phase 01–08 **不实现**。每条保留动机与建议，避免遗忘；启动前需产品确认。
+> 主线 Phase 01–08 **已完成**。产品口径与减法见 [10-direction.md](./10-direction.md)。本文件只跟踪尚未做完或已拍板待改的条目。
 
 ## How to use
 
@@ -89,7 +89,7 @@
 
 **风险**：文件泄漏 + 弱导出密码
 
-- [x] 已实现：`src/lib/vaultBackup.ts` + Settings 导出 / Setup 恢复；恢复 passphrase 包装 plaintext items + master key，恢复后设新 PIN（WebAuthn 需重新 enroll）
+- [x] 已实现：`src/lib/vaultBackup.ts` + Settings 导出 / Setup 恢复；恢复 passphrase 包装 plaintext items + master key，恢复后设新 PIN。WebAuthn **不能**随文件搬家；Settings 可重新登记（B12）
 
 ---
 
@@ -97,17 +97,17 @@
 
 **动机**：更强默认安全；demo 为 UX 选择 view-only 先看元数据。
 
-**建议**：设置项 `requireUnlockOnLaunch`；默认 false 保持现状或 true 更安全（产品定）
+**建议**：设置项 `requireUnlockOnLaunch`；默认 false 保持现状或 true 更安全。
 
-- [ ] 未开始
+- [ ] 未开始（已拍板：维持 view-only，本项不做）
 
 ---
 
 ## B8 — Owner display name 持久化
 
-**动机**：Setup 收集的 name 目前可只用于 WebAuthn；可写入 metadata 扩展字段用于 UI 问候。
+**动机**：曾考虑把 Setup 的 name 写入 metadata 做 UI 问候。用户对 WebAuthn user.name 无感知，产品侧不收集、不展示。
 
-- [ ] 未开始
+- [x] 不做：登记凭证时用固定 `WEBAUTHN_USER_NAME`（`kbox`）。
 
 ---
 
@@ -121,18 +121,57 @@
 
 ---
 
+## B10 — 移除 OneDrive
+
+**动机**：云盘只留 Google Drive，去掉第二套 PKCE / 用户自建应用。已拍板（10-direction）。
+
+**建议**：删 `oneDrive` transport 与 UI 入口；Drive 相关测试不再覆盖 OneDrive。不做用户迁移。
+
+- [x] 已实现：删除 `oneDrive` transport、PKCE popup、Setup/Settings 入口与相关测试。旧 `onedrive` 会话读取时丢弃。
+
+---
+
+## B11 — Google Drive 同步改为可开关
+
+**动机**：现网授权后 600ms 自动 push、解锁自动 pull，和「可选数据移动」冲突。已拍板：手动 Push / Pull + 自动开关，**默认关**。
+
+**建议**：Settings 提供 Push / Pull；自动推拉仅在开关打开后生效。P2P 覆盖后仅当开关开着才 `schedulePush`。
+
+- [x] 已实现：Settings 手动 Push / Pull；`autoSync` 默认 false；关闭时不 schedulePush、不解锁 auto-pull。
+
+---
+
+## B12 — 恢复 / 拉云后重新登记 WebAuthn
+
+**动机**：云端包与恢复文件都会把 `hasWebAuthn` 打成 false；设置页只有只读状态。已拍板：做重新登记。
+
+- [x] 已实现：Settings Face ID 段可 Enable / Replace；`useVault.enrollWebAuthn` 用当前主密钥重新 wrap。
+
+---
+
+## B13 — Reset 时断开云盘
+
+**动机**：`resetVault` 现不清 `kbox_cloud_sync`。空库再解锁可能把空包推上去或把旧包拉回来。已拍板：Reset 断开 Google 并清本地 OAuth。
+
+- [x] 已实现：HomePage Reset 先 `cloud.reset()`（`clearCloudSyncState`），再 `resetVault`。Google 从不持久化 token。
+
+---
+
 ## Explicitly not planned
 
-| 项                                        | 原因                       |
-| ----------------------------------------- | -------------------------- |
-| 将密钥同步到云 / 自建后端存储明文或主密钥 | 违背端到端本地加密产品定位 |
-| 迁入 `@google/genai` / Express demo 残留  | 与功能无关                 |
-| 修改 `demo/` 源码                         | 保留参考；主线只读         |
+| 项                                       | 原因                              |
+| ---------------------------------------- | --------------------------------- |
+| kbox 自建后端存储明文、主密钥或金库账号  | 无服务端定位                      |
+| 条目级 merge / CRDT                      | 现网 WebRTC 与 Drive 都是整库覆盖 |
+| 迁入 `@google/genai` / Express demo 残留 | 与功能无关                        |
+| 修改 `demo/` 源码做产品功能              | 保留参考；主线只读                |
+| 把产品写成「纯本地、数据不能离开设备」   | 数据移动是可选真实需求            |
 
 ---
 
 ## Done
 
-- B1 PWA（manifest / SW / update banner）
+- B1 PWA（manifest / SW / update banner）— **保留**
 - B2 BiometricSimulator DEV-only gate
+- B6 加密恢复文件
 - B9 部分：Cypress component + dual-browser sync smoke

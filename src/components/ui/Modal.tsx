@@ -2,16 +2,32 @@ import {useEffect, type ReactNode} from 'react';
 import {AnimatePresence, motion} from 'motion/react';
 import {X} from 'lucide-react';
 
+type ModalSize = 'md' | 'lg' | 'xl';
+
 type ModalProps = {
     isOpen: boolean;
     onClose: () => void;
     title: string;
     description?: string;
     children: ReactNode;
-    /** Wider sheet for forms */
-    size?: 'md' | 'lg';
+    /** Wider sheet for forms. `xl` is a desktop preferences window. */
+    size?: ModalSize;
     /** Hide the built-in header (caller provides its own) */
     hideHeader?: boolean;
+    /** When false, the body does not pad or scroll — the caller owns layout. */
+    padded?: boolean;
+};
+
+const SIZE_CLASS: Record<ModalSize, string> = {
+    md: 'sm:max-w-md',
+    lg: 'sm:max-w-lg',
+    xl: 'sm:max-w-3xl md:max-w-4xl lg:max-w-5xl'
+};
+
+const HEIGHT_CLASS: Record<ModalSize, string> = {
+    md: 'h-full sm:h-auto sm:max-h-[min(92dvh,100%)]',
+    lg: 'h-full sm:h-auto sm:max-h-[min(92dvh,100%)]',
+    xl: 'h-full sm:h-[min(44rem,92dvh)]'
 };
 
 export default function Modal({
@@ -21,7 +37,8 @@ export default function Modal({
     description,
     children,
     size = 'md',
-    hideHeader = false
+    hideHeader = false,
+    padded = true
 }: ModalProps) {
     useEffect(() => {
         if (!isOpen) return;
@@ -40,8 +57,6 @@ export default function Modal({
             document.body.style.overflow = previous;
         };
     }, [isOpen]);
-
-    const maxWidth = size === 'lg' ? 'sm:max-w-lg' : 'sm:max-w-md';
 
     return (
         <AnimatePresence>
@@ -65,7 +80,7 @@ export default function Modal({
                         animate={{opacity: 1, y: 0, scale: 1}}
                         exit={{opacity: 0, y: 16, scale: 0.98}}
                         transition={{duration: 0.28, ease: [0.32, 0.72, 0, 1]}}
-                        className={`relative flex flex-col w-full ${maxWidth} h-full max-h-full sm:h-auto sm:max-h-[min(92dvh,100%)] overflow-hidden bg-surface-900 border border-surface-700 border-b-0 sm:border-b rounded-t-2xl sm:rounded-2xl shadow-[0_-8px_40px_rgba(0,0,0,0.45)] sheet-safe-edges`}
+                        className={`relative flex flex-col w-full ${SIZE_CLASS[size]} ${HEIGHT_CLASS[size]} max-h-full overflow-hidden bg-surface-900 border border-surface-700 border-b-0 sm:border-b rounded-t-2xl sm:rounded-2xl shadow-[0_-8px_40px_rgba(0,0,0,0.45)] sheet-safe-edges`}
                     >
                         <div className="h-1 w-full shrink-0 hazard-stripe rounded-t-2xl sm:rounded-t-2xl" aria-hidden />
                         {!hideHeader && (
@@ -93,11 +108,15 @@ export default function Modal({
                                 </button>
                             </div>
                         )}
-                        <div className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain scrollbar-none sheet-scroll">
-                            <div className={`px-5 sm:px-6 safe-pb ${hideHeader ? 'pt-5 sm:pt-6' : 'pt-4 sm:pt-5'}`}>
-                                {children}
+                        {padded ? (
+                            <div className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain scrollbar-none sheet-scroll">
+                                <div className={`px-5 sm:px-6 safe-pb ${hideHeader ? 'pt-5 sm:pt-6' : 'pt-4 sm:pt-5'}`}>
+                                    {children}
+                                </div>
                             </div>
-                        </div>
+                        ) : (
+                            <div className="flex-1 min-h-0 overflow-hidden flex flex-col">{children}</div>
+                        )}
                     </motion.div>
                 </div>
             )}

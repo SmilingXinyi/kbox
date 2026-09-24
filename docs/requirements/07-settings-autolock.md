@@ -1,5 +1,7 @@
 # 07 — Settings & Auto-lock UX
 
+> 历史阶段文档。Settings 后来接入了恢复文件导出与云盘；云同步口径见 [10-direction.md](./10-direction.md)。PWA 更新条已实现并保留。
+
 ## Goal
 
 实现设置面板：自动锁定策略、危险区重置；与 `useAutoLock` / `lockBehavior` 完整接通。

@@ -1,6 +1,6 @@
 import type {ApiKeyItem, LockBehavior, VaultMetadata} from './vault';
 
-export type CloudProviderId = 'google-drive' | 'onedrive';
+export type CloudProviderId = 'google-drive';
 
 export const CLOUD_VAULT_FORMAT = 'kbox-cloud-vault' as const;
 export const CLOUD_VAULT_VERSION = 2 as const;
@@ -41,7 +41,7 @@ export type CloudAuthSession = {
     refreshToken?: string;
     expiresAt: number;
     accountLabel?: string;
-    /** Public OAuth client ID used to obtain this session (needed to refresh). */
+    /** Public OAuth client ID used to obtain this session. */
     clientId?: string;
 };
 

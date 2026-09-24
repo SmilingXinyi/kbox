@@ -18,6 +18,7 @@
 - [x] [07-settings-autolock.md](./07-settings-autolock.md)
 - [x] [08-polish-qa.md](./08-polish-qa.md)
 - [x] [99-backlog.md](./99-backlog.md)
+- [x] [10-direction.md](./10-direction.md)
 
 ---
 
@@ -108,15 +109,19 @@
 
 ## Backlog（不阻塞）
 
-- [x] B1 PWA（manifest + SW + `usePWA` 更新提示；见 `4894d96`）
+- [x] B1 PWA（manifest + SW + `usePWA` 更新提示；见 `4894d96`）— 保留
 - [x] B2 BiometricSimulator（仅 DEV / `VITE_ENABLE_BIOMETRIC_SIMULATOR`）
 - [ ] B3 WebAuthn RP / 服务端 challenge
 - [ ] B4 子路由
 - [ ] B5 单元测试（crypto / vaultItems）
-- [ ] B6 加密备份
-- [ ] B7 启动强制解锁选项
-- [ ] B8 Owner name 持久化
+- [x] B6 加密备份（恢复文件）
+- [ ] B7 启动强制解锁选项（**已决定不做**：维持 view-only）
+- [x] B8 Owner name — **不做**：不向用户收集；WebAuthn 用固定 `kbox`
 - [x] B9 E2E 冒烟（Cypress component + `pnpm test:dual-sync` Playwright）
+- [x] B10 移除 OneDrive
+- [x] B11 Google Drive：手动 Push/Pull + 自动开关默认关
+- [x] B12 恢复 / 拉云后重新登记 WebAuthn
+- [x] B13 Reset 时断开 Google Drive
 
 详见 [99-backlog.md](./99-backlog.md)
 
@@ -124,9 +129,9 @@
 
 ## Sign-off
 
-| 项                   | 状态                                        |
-| -------------------- | ------------------------------------------- |
-| 主线 Phase 01–08     | 完成（含 Chrome DevTools 冒烟，2026-07-14） |
-| 可发布本地 vault MVP | 是                                          |
+| 项                       | 状态                                        |
+| ------------------------ | ------------------------------------------- |
+| 主线 Phase 01–08         | 完成（含 Chrome DevTools 冒烟，2026-07-14） |
+| 可发布无服务端 vault MVP | 是（B10–B13 已落地，2026-09-17）            |
 
 完成手动冒烟后将上表更新为完成，并注明日期。

@@ -482,7 +482,7 @@ export default function VaultSync({isOpen, onClose, sync, isUnlocked, onRequestU
 
                     {sync.role === 'host' && (sync.sessionState === 'connected' || sync.sessionState === 'synced') && (
                         <div className="space-y-2">
-                            <p className="text-[11px] text-surface-400">Merge strategy</p>
+                            <p className="text-[11px] text-surface-400">Overwrite direction</p>
                             <button
                                 type="button"
                                 onClick={() => handleStrategy('a-overwrites-b')}
@@ -534,8 +534,8 @@ export default function VaultSync({isOpen, onClose, sync, isUnlocked, onRequestU
 
                     {sync.role === 'guest' && sync.sessionState === 'connected' && !sync.pendingIncoming && (
                         <p className="text-[11px] text-surface-400 leading-relaxed">
-                            Connected. Wait for the host to choose a merge strategy. You will be asked to confirm before
-                            any keys are sent or replaced.
+                            Connected. Wait for the host to choose an overwrite direction. You will be asked to confirm
+                            before any keys are sent or replaced.
                         </p>
                     )}
 

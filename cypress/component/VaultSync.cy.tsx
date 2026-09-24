@@ -2,6 +2,10 @@ import VaultSync from '../../src/components/vault/VaultSync';
 import {createMockSync} from '../support/mockSync';
 
 describe('<VaultSync />', () => {
+    beforeEach(() => {
+        cy.viewport(1280, 900);
+    });
+
     it('shows unlock warning and mode buttons when idle', () => {
         const sync = createMockSync({sessionState: 'idle'});
         const onRequestUnlock = cy.stub().as('onRequestUnlock');
@@ -46,7 +50,7 @@ describe('<VaultSync />', () => {
         cy.get('img[alt="Sync QR code"]').should('be.visible');
         cy.contains('hostPeer123456').should('be.visible');
         cy.contains('abcd1234').should('be.visible');
-        cy.contains('button', 'Copy invite').should('be.visible');
+        cy.contains('button', 'Copy invite').scrollIntoView().should('be.visible');
     });
 
     it('shows connected status and merge strategies for host', () => {
@@ -62,7 +66,7 @@ describe('<VaultSync />', () => {
         cy.contains('Devices linked — ready to sync').should('be.visible');
         cy.contains('3 keys').should('be.visible');
         cy.contains('1 key').should('be.visible');
-        cy.contains('Merge strategy').should('be.visible');
+        cy.contains('Overwrite direction').should('be.visible');
         cy.contains('button', 'A overwrites B').should('be.visible');
         cy.contains('button', 'Read B, overwrite A').should('be.visible');
     });
@@ -115,7 +119,7 @@ describe('<VaultSync />', () => {
         cy.mount(<VaultSync isOpen onClose={cy.stub()} sync={sync} isUnlocked onRequestUnlock={cy.stub()} />);
 
         cy.contains('You will be asked to confirm').should('be.visible');
-        cy.contains('Merge strategy').should('not.exist');
+        cy.contains('Overwrite direction').should('not.exist');
     });
 
     it('shows guest confirm UI for pending host overwrite', () => {

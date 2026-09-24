@@ -49,7 +49,7 @@
 ### webauthn.ts
 
 - [x] `isWebAuthnSupported()` / `isRunningInIframe()`
-- [x] `registerWebAuthnCredential(username)` / `getWebAuthnAssertion(credentialId, prfSaltHex)`
+- [x] `registerWebAuthnCredential()` / `getWebAuthnAssertion(credentialId, prfSaltHex)`（`user.name` 固定为 `WEBAUTHN_USER_NAME`）
 - [x] RP name：`kbox`；`rp.id` 用 `location.hostname`
 - [x] Challenge 每次随机（纯客户端，无服务端 attestation；升级见 backlog B3）
 - [x] **不**在 lib 层返回 simulator 成功路径；iframe / 不支持时返回 `errorMessage`，由 UI 决定是否启用 DEV sandbox
